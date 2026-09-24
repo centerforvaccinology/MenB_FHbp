@@ -1,0 +1,3395 @@
+---
+title: "Data analysis MenB-FHbp"
+author: "Anthony Willems"
+date: "2026-09-22"
+output: html_document
+---
+
+# Working directory and packages
+```{r}
+setwd("~/All files start R")
+```
+
+```{r}
+install.packages("tidyverse")
+install.packages("readr")
+install.packages("purrr")
+library(purrr)
+library(tidyverse)
+library(readr)
+```
+
+# Loading in Excel files + merging
+```{r}
+NCT00808028_d <- read_csv("Demographic NCT00808028.csv")
+NCT00808028_i <- read_csv("Immunogenicity NCT00808028.csv")
+NCT01299480_d <- read_csv("Demographic NCT01299480.csv")
+NCT01299480_i <- read_csv("Immunogenicity NCT01299480.csv")
+NCT01323270_d <- read_csv("Demographic NCT01323270.csv")
+NCT01323270_i <- read_csv("Immunogenicity NCT01323270.csv")
+NCT01352845_d <- read_csv("Demographic NCT01352845.csv")
+NCT01352845_i <- read_csv("Immunogenicity NCT01352845.csv")
+
+NCT01461980_d <- read_csv("Demographic NCT01461980.csv")
+NCT01461980_i <- read_csv("Immunogenicity NCT01461980.csv")
+NCT01461993_d <- read_csv("Demographic NCT01461993.csv")
+NCT01461993_i <- read_csv("Immunogenicity NCT01461993.csv")
+NCT01543087_d <- read_csv("Demographic NCT01543087.csv")
+NCT01543087_i <- read_csv("Immunogenicity NCT01543087.csv")
+NCT01830855_d <- read_csv("Demographic NCT01830855.csv")
+NCT01830855_i <- read_csv("Immunogenicity NCT01830855.csv")
+
+NCT02531698_d <- read_csv("Demographic NCT02531698.csv")
+NCT02531698_i <- read_csv("Immunogenicity NCT02531698.csv")
+NCT02534935_d <- read_csv("Demographic NCT02534935.csv")
+NCT02534935_i <- read_csv("Immunogenicity NCT02534935.csv")
+NCT03135834_d <- read_csv("Demographic NCT03135834.csv")
+NCT03135834_i <- read_csv("Immunogenicity NCT03135834.csv")
+NCT04440163_d <- read_csv("Demographic NCT04440163.csv")
+NCT04440163_i <- read_csv("Immunogenicity NCT04440163.csv")
+```
+
+## Unique STUDY-Patient ID
+```{r}
+files <- list(
+  '2' = list(d = NCT00808028_d, i = NCT00808028_i),
+  '3' = list(d = NCT01299480_d, i = NCT01299480_i),
+  '4' = list(d = NCT01323270_d, i = NCT01323270_i),
+  '5' = list(d = NCT01352845_d, i = NCT01352845_i), 
+  '6' = list(d = NCT01461980_d, i = NCT01461980_i),
+  '7' = list(d = NCT01461993_d, i = NCT01461993_i), 
+  '8' = list(d = NCT01543087_d, i = NCT01543087_i),
+  '9' = list(d = NCT01830855_d, i = NCT01830855_i), 
+  '10' = list(d = NCT02531698_d, i = NCT02531698_i),
+  '11' = list(d = NCT02534935_d, i = NCT02534935_i),
+  '12' = list(d = NCT03135834_d, i = NCT03135834_i),
+  '13' = list(d = NCT04440163_d, i = NCT04440163_i))
+
+study_map <- c(
+  '2' = "NCT00808028", 
+  '3' = "NCT01299480",
+  '4' = "NCT01323270",
+  '5' = "NCT01352845", 
+  '6' = "NCT01461980",
+  '7' = "NCT01461993", 
+  '8' = "NCT01543087", 
+  '9' = "NCT01830855", 
+  '10' = "NCT02531698",
+  '11' = "NCT02534935",
+  '12' = "NCT03135834",
+  '13' = "NCT04440163"
+  )
+
+for (prefix in names(files)) {
+  for (type in names(files[[prefix]])){
+    df <- files[[prefix]][[type]]
+    
+    df$PT <- paste0(prefix, "_", df$PT)
+    
+    assign(paste0("NCT", prefix, "_", type), df, envir = .GlobalEnv)
+  }
+}
+```
+
+## Merge data files
+```{r}
+alle_data <- map2_dfr(files, names(files), function(pair,prefix){
+  study_id <- study_map[[prefix]]
+  
+  d <- pair$d %>% mutate(across(everything(), as.character))
+  i <- pair$i %>% mutate(across(everything(), as.character))
+  
+  d <- d %>% mutate(PT = paste0(study_id, "_", PT))
+  i <- i %>% mutate(PT = paste0(study_id, "_", PT))
+  
+  overlap_cols <- intersect(names(d), names(i)) |> setdiff("PT")
+  d <- d %>% select(-all_of(overlap_cols))
+  
+  df_merged <- left_join(i, d, by = "PT") %>% 
+    mutate(STUDY = study_id)%>%
+  
+  return(df_merged)
+})
+
+alle_data <- alle_data %>%
+  rename(DOSING_SCHEME_GROUP = `DOSING SCHEME GROUP`)
+
+library(dplyr)
+alle_data %>%
+  group_by(STUDY) %>%
+  summarise(x = n_distinct(PT, na.rm = TRUE))%>%
+  arrange(desc(x))
+```
+
+# Data cleaning
+## ASSAY
+```{r}
+unique(alle_data$ASSAYCD)
+assays_verwijderen <- c(
+  "Composite", "Composite Response", "Diphtheria", "Tetanus", "Pertussis toxoid", "Pertussis filamentous hemagglutinin", "Pertussis pertactin", "Pertussis fimbrial agglutinogens types 2 + 3", "Poliomyelitis 1",   "Poliomyelitis 2", "Poliomyelitis 3", "NA", "Pertussis fimbriae agglutinogens types 2 + 3", "IgG Serogroup A", "IgG Serogroup C", "IgG Serogroup Y", "IgG Serogroup W-135", "rSBA Serogroup A", "rSBA Serogroup C", "rSBA Serogroup Y", "rSBA Serogroup W-135", "HPV-6", "HPV-11", "HPV-16", "HPV-18", "MenA", "MenW", "MenY", "MenC", "COMPR", "SCOMPR") 
+
+alle_data_clean_assay <- alle_data %>%
+  filter(!ASSAYCD %in% assays_verwijderen)
+```
+
+```{r}
+alle_data_clean_assay <- alle_data_clean_assay %>%
+  mutate(
+    ASSAYCD = case_when(
+      ASSAYCD == "PMB80 (A22)" ~ "A22", 
+      ASSAYCD == "PMB2948 (B24)" ~ "B24",
+      ASSAYCD == "A/N1C1" ~ "A29",
+      ASSAYCD == "PMB3175 (A29)" ~ "A29",
+      ASSAYCD == "PMB1672 (A15)" ~ "A15",
+      ASSAYCD == "PMB1989 (A19)" ~ "A19",
+      ASSAYCD == "PMB3010 (A06)" ~ "A06",
+      ASSAYCD == "PMB824 (A12)" ~ "A12",
+      ASSAYCD == "PMB3040 (A07)" ~ "A07",
+      ASSAYCD == "PMB648 (B16)" ~ "B16",
+      ASSAYCD == "PMB866 (B09)" ~ "B09",
+      ASSAYCD == "PMB1256 (B03)" ~ "B03",
+      ASSAYCD == "PMB431 (B15)" ~ "B15",
+      ASSAYCD == "B24_OLD" ~ "B24", 
+      TRUE ~ ASSAYCD
+  )
+)
+
+alle_data_clean_assay <- alle_data_clean_assay%>%
+  filter(!(ASSAYCD %in% c("A", "B")))
+```
+
+## AGE
+```{r}
+alle_data_clean_assay <- alle_data_clean_assay %>%
+  mutate(
+    AGE = case_when(
+      AGE == "14-Oct" ~ "10-14", 
+      AGE == "13-Oct" ~ "10-13",
+      AGE == "19-Oct" ~ "10-19",
+      AGE == "9-May" ~ "5-9",
+      TRUE ~ AGE
+  )
+)
+
+alle_data_clean_assay <- alle_data_clean_assay %>%
+  filter(!grepl("\\.", AGE))
+```
+
+## GROUP
+```{r}
+alle_data_clean_assay_group <- alle_data_clean_assay %>%
+  mutate(
+    GROUP_DOSIS = case_when(
+      GROUP == "rLP2086>Saline>Saline>rLP2086" ~ "120 ug rLP2086",
+      GROUP == "rLP2086>Saline>rLP2086>Saline" ~ "120 ug rLP2086",                     
+      GROUP == "rLP2086>rLP2086>Saline>rLP2086" ~ "120 ug rLP2086",
+      GROUP == "rLP2086>Saline>rLP2086>rLP2086" ~ "120 ug rLP2086",
+      GROUP == "Saline>Saline>rLP2086>rLP2086" ~ "120 ug rLP2086",
+      GROUP == "rLP2086+Repevax/rLP2086/rLP2086" ~ "120 ug rLP2086",
+      GROUP == "Saline+Repevax/Saline/Saline" ~ "Placebo",                     
+      GROUP == "rLP2086+Repevax" ~ "120 ug rLP2086",
+      GROUP == "rLP2086+Repevax/rLP2086" ~ "120 ug rLP2086",                       
+      GROUP == "Saline+Repevax/Saline" ~ "Placebo",
+      GROUP == "Saline+Repevax" ~ "Placebo",                                    
+      GROUP == "rLP2086" ~ "120 ug rLP2086",
+      GROUP == "rLP2086/rLP2086/rLP2086" ~ "120 ug rLP2086",                           
+      GROUP == "Saline/Saline/Saline" ~ "Placebo",
+      GROUP == "rLP2086/rLP2086" ~ "120 ug rLP2086",                                   
+      GROUP == "Saline" ~ "120 ug rLP2086", 
+      GROUP == "Saline/Saline" ~ "Placebo",                                     
+      GROUP == "MCV4+Tdap+rLP2086" ~ "120 ug rLP2086",
+      GROUP == "MCV4+Tdap+rLP2086/rLP2086/rLP2086" ~ "120 ug rLP2086",                 
+      GROUP == "Saline+Saline+rLP2086" ~ "120 ug rLP2086", 
+      GROUP == "Saline+Saline+rLP2086/rLP2086/rLP2086" ~ "120 ug rLP2086",            
+      GROUP == "MCV4+Tdap+rLP2086/rLP2086" ~ "120 ug rLP2086",
+      GROUP == "Saline+Saline+rLP2086/rLP2086" ~ "120 ug rLP2086",                     
+      GROUP == "MCV4+Tdap+Saline/Saline/Saline" ~ "Placebo",
+      GROUP == "rLP2086+Saline/rLP2086+Saline/rLP2086+Saline" ~ "120 ug rLP2086",      
+      GROUP == "rLP2086+Saline/rLP2086+Saline" ~ "120 ug rLP2086",
+      GROUP == "rLP2086+Gardasil/rLP2086+Gardasil" ~ "120 ug rLP2086",                 
+      GROUP == "rLP2086+Gardasil" ~ "120 ug rLP2086",
+      GROUP == "rLP2086+Gardasil/rLP2086+Gardasil/rLP2086+Gardasil" ~ "120 ug rLP2086",
+      GROUP == "rLP2086+Saline" ~ "120 ug rLP2086",                                 
+      GROUP == "rLP2086+Gardasil/rLP2086+Gardasil/Saline+Gardasil" ~ "120 ug rLP2086", 
+      GROUP == "rLP2086+Saline/rLP2086+Gardasil" ~ "120 ug rLP2086",                   
+      GROUP == "rLP+rLP+Sal+rLP" ~ "120 ug rLP2086",
+      GROUP == "rLP+Sal+Sal+rLP" ~ "120 ug rLP2086",                                   
+      GROUP == "rLP+Sal+rLP+Sal" ~ "120 ug rLP2086",
+      GROUP == "rLP+Sal+rLP+rLP" ~ "120 ug rLP2086",                                   
+      GROUP == "Sal+Sal+rLP+rLP" ~ "120 ug rLP2086",
+      GROUP == "HAV/saline/HAV" ~ "Placebo",                                    
+      GROUP == "rLP2086 Lot 2/rLP2086 Lot 2/rLP2086 Lot 2" ~ "120 ug rLP2086",
+      GROUP == "rLP2086 Lot 1/rLP2086 Lot 1/rLP2086 Lot 1" ~ "120 ug rLP2086",
+      GROUP == "rLP2086 Lot 1" ~ "120 ug rLP2086",
+      GROUP == "rLP2086 Lot 3/rLP2086 Lot 3/rLP2086 Lot 3" ~ "120 ug rLP2086",         
+      GROUP == "HAV/saline" ~ "Placebo",
+      GROUP == "rLP2086 Lot 3/rLP2086 Lot 3" ~ "Placebo",                       
+      GROUP == "rLP2086 Lot 1/rLP2086 Lot 1" ~ "120 ug rLP2086",
+      GROUP == "HAV" ~ "Placebo",                                                
+      GROUP == "rLP2086 Lot 2" ~ "120 ug rLP2086",
+      GROUP == "rLP2086 Lot 1/HAV" ~ "120 ug rLP2086",                                 
+      GROUP == "rLP2086 Lot 3" ~ "120 ug rLP2086",
+      GROUP == "rLP2086 Lot 2/rLP2086 Lot 2" ~ "120 ug rLP2086",                       
+      GROUP == "HAV/rLP2086 Lot 3" ~ "120 ug rLP2086",
+      GROUP == "HAV/saline/rLP2086 Lot 1" ~ "120 ug rLP2086",                          
+      GROUP == "HAV/rLP2086 Lot 2/HAV" ~ "120 ug rLP2086", 
+      GROUP == "HAV/NR/NR" ~ "Placebo",                                         
+      GROUP == "rLP2086/rLP2086/NR" ~ "120 ug rLP2086",
+      GROUP == "rLP2086/NR/NR" ~ "120 ug rLP2086",                                     
+      GROUP == "HAV/Saline/HAV" ~ "Placebo",
+      GROUP == "120 mcg rLP2086/120 mcg rLP2086/120 mcg rLP2086" ~ "120 ug rLP2086",   
+      GROUP == "60 mcg rLP2086/60 mcg rLP2086/60 mcg rLP2086" ~ "60 ug rLP2086",
+      GROUP == "120 mcg rLP2086/120 mcg rLP2086/NR" ~ "120 ug rLP2086",                
+      GROUP == "120 mcg rLP2086/NR/NR" ~ "120 ug rLP2086",
+      GROUP == "HAV/Saline/NR" ~ "Placebo",                                     
+      GROUP == "Experienced, MenABCWY+Saline/MenABCWY" ~ "MenABCWY",
+      GROUP == "Naive, MenABCWY+Saline/MenABCWY" ~ "MenABCWY",                   
+      GROUP == "Naive, rLP2086+Menveo/rLP2086"  ~ "120 ug rLP2086",
+      GROUP == "Experienced, rLP2086+Menveo/rLP2086" ~ "120 ug rLP2086",               
+      GROUP == "IMM- Naive, MenABCWY+Saline/MenABCWY" ~ "MenABCWY",
+      GROUP == "IMM- Naive, Trumenba+MenACWY-CRM/Trumenba" ~ "120 ug rLP2086",         
+      GROUP == "IMM- Experienced, MenABCWY+Saline/MenABCWY" ~ "MenABCWY",
+      GROUP == "IMM- Experienced, Trumenba+MenACWY-CRM/Trumenba" ~ "120 ug rLP2086",   
+      GROUP == "SAF- Naive, MenABCWY+Saline/MenABCWY" ~ "MenABCWY",
+      GROUP == "SAF- Experienced, MenABCWY+Saline/MenABCWY" ~ "MenABCWY", 
+      TRUE ~ GROUP
+  )
+)
+
+alle_data_clean_assay_group <- alle_data_clean_assay_group %>%
+  filter(!GROUP_DOSIS %in% c("Not Treated", "Screen Failure", "Unknown"))%>%
+  mutate(GROUP_DOSIS = case_when(
+    GROUP_DOSIS == "MenABCWY" ~ "120 ug rLP2086",
+    TRUE ~ GROUP_DOSIS
+  ))
+```
+
+##CP EVENT
+```{r}
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group %>%
+  mutate(
+    CPEVENT = case_when(
+      CPEVENT == "Postdose 2" ~ "1 Month after Dose 2",
+      CPEVENT == "Postdose 3" ~ "1 Month after Dose 3",
+      CPEVENT == "6-month postdose 3" ~ "6 Months after Dose 3",
+      CPEVENT == "12-month postdose 3" ~ "12 Months after Dose 3",                  
+      CPEVENT == "18-month postdose 3" ~ "18 Months after Dose 3",
+      CPEVENT == "24-month postdose 3" ~ "24 Months after Dose 3",                
+      CPEVENT == "36-month postdose 3" ~ "36 Months after Dose 3",
+      CPEVENT == "48-month postdose 3" ~ "48 Months after Dose 3",                
+      CPEVENT == "Before Injection 1" ~ "Predose 1", 
+      CPEVENT == "1 Month after Injection 2" ~ "1 Month after Dose 2",          
+      CPEVENT == "1 Month after Injection 3" ~ "1 Month after Dose 3",
+      CPEVENT == "Before Vaccination 1" ~ "Predose 1",
+      CPEVENT == "1 Month after Vaccination 2" ~ "1 Month after Dose 2",        
+      CPEVENT == "1 Month after Vaccination 3" ~ "1 Month after Dose 3",
+      CPEVENT == "Vaccination 1 and Blood Draw" ~ "Predose 1",      
+      CPEVENT == "Post-Vaccination 2 Blood Draw" ~ "1 Month after Dose 2",
+      CPEVENT == "Post-Vaccination 3 Blood Draw" ~ "1 Month after Dose 3",      
+      CPEVENT == "Month 12 Follow-up and Blood Draw" ~ "12 Months after Dose 1",
+      CPEVENT == "6 Months after Vaccination 3" ~ "6 Months after Dose 3",       
+      CPEVENT == "12 Months after Vaccination 3" ~ "12 Months after Dose 3",
+      CPEVENT == "24 Months after Vaccination 3" ~ "24 Months after Dose 3",       
+      CPEVENT == "1 Month after Vaccination 1" ~ "1 Month after Dose 1",
+      CPEVENT == "Before Vaccination 2" ~ "Predose 2",              
+      CPEVENT == "12 Months after Vaccination 2" ~ "12 Months after Dose 2",
+      CPEVENT == "24 Months after Vaccination 2" ~ "24 Months after Dose 2",      
+      CPEVENT == "36 Months after Vaccination 2" ~ "36 Months after Dose 2",
+      CPEVENT == "48 Months after Vaccination 2" ~ "48 Months after Dose 2",
+      CPEVENT == "1 Month after Injection 4" & GROUP %in% c("rLP2086>rLP2086>Saline>rLP2086", "rLP2086>Saline>rLP2086>rLP2086") ~ "1 Month after Dose 3",
+      CPEVENT == "1 Month after Injection 4" & GROUP %in% c("Saline>Saline>rLP2086>rLP2086", "rLP2086>Saline>Saline>rLP2086") ~ "1 Month after Dose 2",
+      CPEVENT == "1 Month after Injection 4" & GROUP %in% c("rLP2086>Saline>rLP2086>Saline") ~ "5 Months after Dose 2", 
+      TRUE ~ CPEVENT
+    )
+  )
+unique(alle_data_clean_assay_group_cpevent$CPEVENT)
+```
+##CP EVENT - booster studies
+```{r}
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT02534935"]))
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT02534935" & CPEVENT == "1 Month after booster Vaccination" ~ "1 Month after booster (3-dose schedule)", 
+      TRUE ~ CPEVENT))
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT02534935"]))
+
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT03135834"]))
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT03135834" & CPEVENT == "1 Month after booster vaccination" ~ "1 Month after booster (2-dose schedule)", 
+      TRUE ~ CPEVENT))
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT03135834"]))
+
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT01543087"]))
+
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "1 Month after booster vaccination" ~ "1 Month after booster (3-dose schedule)",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "1 Month after booster vaccination" ~ "1 Month after booster (2-dose schedule)",
+      TRUE ~ CPEVENT
+    )
+  )
+
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "26 Months after booster vaccination" ~ "26 Months after booster (3-dose schedule)",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "26 Months after booster vaccination" ~ "26 Months after booster (2-dose schedule)",
+      TRUE ~ CPEVENT
+    )
+  )
+
+alle_data_clean_assay_group_cpevent <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "12 Months after booster vaccination" ~ "12 Months after booster (3-dose schedule)",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "12 Months after booster vaccination" ~ "12 Months after booster (2-dose schedule)",
+      TRUE ~ CPEVENT
+    )
+  )
+
+sort(
+  unique(alle_data_clean_assay_group_cpevent$CPEVENT[alle_data_clean_assay_group_cpevent$STUDY == "NCT01543087"]))
+
+unique(alle_data_clean_assay_group_cpevent$CPEVENT)
+```
+
+## Conversion numeric values -> log 10 scale
+```{r}
+alle_data_logtrans <- alle_data_clean_assay_group_cpevent %>%
+  mutate(
+    VALN = as.numeric(VALN),
+    VALN_LOG10 = log10(VALN) 
+  )
+```
+
+## DOSING SCHEME GROUP
+```{r}
+group2_studies <- c("NCT00808028", "NCT01323270", "NCT01352845", "NCT01461980", "NCT01461993", "NCT01830855", "NCT02531698", "NCT02534935")
+group3_studies <- c("NCT03135834", "NCT04440163")
+
+alle_data_logtrans_GROUP <- alle_data_logtrans %>%
+  mutate(
+  DOSING_SCHEME_GROUP = case_when(
+      STUDY %in% group2_studies ~ "GROUP 2",
+      STUDY %in% group3_studies ~ "GROUP 3",
+      TRUE ~ DOSING_SCHEME_GROUP
+    )
+  )
+
+alle_data_logtrans_GROUP <- alle_data_logtrans_GROUP%>%
+  filter(DOSING_SCHEME_GROUP != "Unknown")
+```
+
+##Further cleaning CPEVENT
+```{r}
+alle_data_logtrans_GROUP <- alle_data_logtrans_GROUP %>%
+  mutate(
+    CPEVENT = case_when(
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "1 Month after last dose" ~ "1 Month after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "6 Months after last dose" ~ "6 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "12 Months after last dose" ~ "12 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "18 Months after last dose" ~ "18 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "24 Months after last dose" ~ "24 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "36 Months after last dose" ~ "36 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2") & CPEVENT == "48 Months after last dose" ~ "48 Months after Dose 3",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "1 Month after last dose" ~ "1 Month after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "6 Months after last dose" ~ "6 Months after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "12 Months after last dose" ~ "12 Months after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "18 Months after last dose" ~ "18 Months after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "24 Months after last dose" ~ "24 Months after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "36 Months after last dose" ~ "36 Months after Dose 2",
+      STUDY == "NCT01543087" & DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5") & CPEVENT == "48 Months after last dose" ~ "48 Months after Dose 2",
+      TRUE ~ CPEVENT
+  )
+)
+```
+
+##Further cleaning AGE + SEX
+```{r}
+alle_data_logtrans_GROUP%>%
+  distinct(STUDY, AGE) %>%
+  arrange(STUDY)
+
+alle_data_logtrans_GROUP <- alle_data_logtrans_GROUP%>%
+  mutate(age = as.character(AGE))
+
+alle_data_logtrans_clean_age <- alle_data_logtrans_GROUP %>%
+  mutate(
+    AGE = case_when(
+      AGE == "15-19" ~ "10-19",
+      AGE == "10-14" ~ "10-19",
+      AGE == "20-24" ~ "20-29",
+      AGE == "25-29" ~ "20-29",                  
+      AGE == "10-13" ~ "10-19",
+      AGE == "10-19" ~ "10-19", #from NCT01352845 - age group is 10-18 following article
+      AGE == "10" ~ "10-19",
+      AGE == "11" ~ "10-19",                
+      AGE == "14" ~ "10-19",
+      AGE == "12" ~ "10-19",                
+      AGE == "13" ~ "10-19", 
+      AGE == "16" ~ "10-19",          
+      AGE == "17" ~ "10-19",
+      AGE == "15" ~ "10-19",          
+      AGE == "19" ~ "10-19",
+      AGE == "18" ~ "10-19",        
+      AGE == "20" ~ "20-29",
+      AGE == "<18" ~ "10-19",
+      TRUE ~ AGE
+  )
+)
+
+alle_data_logtrans_clean_age %>%
+  distinct(STUDY, SEX) %>%
+  arrange(STUDY, SEX) 
+
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age %>%
+  filter(!(STUDY == "NCT01543087" & is.na(SEX))) 
+```
+
+##Identifying potential double-data from extension trials + Removal double data NCT01299480-NCT01543087
+```{r}
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age %>%
+  mutate(
+    CPEVENT = case_when(
+      CPEVENT == "1 month after Dose 2" ~ "1 Month after Dose 2", TRUE ~ CPEVENT
+    )
+  )
+unique(alle_data_logtrans_clean_age$CPEVENT)
+
+alle_data_logtrans_clean_age %>%
+  filter(STUDY == "NCT01543087")%>%
+  distinct(CPEVENT)
+alle_data_logtrans_clean_age %>%
+  filter(STUDY == "NCT01299480")%>%
+  distinct(CPEVENT)
+
+alle_data_logtrans_clean_age %>%
+  filter(STUDY == "NCT01543087")%>%
+  distinct(USUBJID)
+
+alle_data_logtrans_clean_age %>%
+  filter(STUDY == "NCT01299480")%>%
+  distinct(USUBJID)
+
+intersect(
+  alle_data_logtrans_clean_age%>%
+    filter(STUDY == "NCT01543087") %>%
+    pull(USUBJID),
+  alle_data_logtrans_clean_age%>%
+    filter(STUDY == "NCT01299480")%>%
+    pull(USUBJID)
+)
+
+alle_data_logtrans_clean_age %>%
+  filter(
+    STUDY == "NCT01543087", 
+    CPEVENT %in% c("1 Month after Dose 2", "1 Month after Dose 3"))%>%
+  group_by(CPEVENT)%>%
+  summarise(n_unique_PT = n_distinct(USUBJID))
+
+ids_ext <- alle_data_logtrans_clean_age%>%
+  filter(
+    STUDY == "NCT01543087",
+    CPEVENT %in% c("1 Month after Dose 2", "1 Month after Dose 3"))%>%
+  distinct(USUBJID)%>%
+  arrange(USUBJID)
+
+ids_primary <- alle_data_logtrans_clean_age%>%
+  filter(
+    STUDY == "NCT01299480",
+    CPEVENT %in% c("1 Month after Dose 2", "1 Month after Dose 3"))%>%
+  distinct(USUBJID)%>%
+  arrange(USUBJID)
+max_len <- max(length(ids_ext$USUBJID), length(ids_primary$USUBJID))
+
+ids_compare <- tibble(
+  EXT_ID = c(ids_ext$USUBJID, rep(NA, max_len - length(ids_ext$USUBJID))),
+  PRIMARY_ID = c(ids_primary$USUBJID,
+                 rep(NA, max_len - length(ids_primary$USUBJID)))
+)
+
+alle_data_logtrans_clean_age%>%
+  filter(
+    STUDY == "NCT01299480",
+    CPEVENT %in%c("1 Month after Dose 2", "1 Month after Dose 3"))%>%
+  count(CPEVENT)
+
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age %>%
+  filter(
+  !(STUDY == "NCT01543087" & CPEVENT %in% c("1 Month after Dose 2", "1 Month after Dose 3"))
+)
+
+alle_data_logtrans_clean_age%>%
+  filter(STUDY=="NCT01543087")%>%
+  count(CPEVENT)
+```
+
+##Data exploration age, sex, race
+```{r}
+sex_counts <- alle_data_logtrans_clean_age%>%
+  distinct(PT, STUDY, SEX)%>%
+  group_by(STUDY, SEX)%>%
+  summarise(n = n(), .groups = "drop")
+
+sex_total <- alle_data_logtrans_clean_age%>%
+  distinct(PT, SEX) %>%
+  group_by(SEX) %>%
+  summarise(n = n(), .groups = "drop")
+
+sex_result <- bind_rows(sex_counts, sex_total %>% mutate(STUDY = "TOTAL"))
+
+age_counts <- alle_data_logtrans_clean_age %>%
+  distinct(PT, STUDY, AGE) %>%
+  group_by(STUDY, AGE) %>%
+  summarise(n = n(), .groups = "drop")
+
+age_total <- alle_data_logtrans_clean_age%>%
+  distinct(PT, AGE) %>%
+  group_by(AGE)%>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(STUDY = "TOTAL")
+
+age_result <- bind_rows(age_counts, age_total)
+
+race_counts <- alle_data_logtrans_clean_age %>%
+  distinct(PT, STUDY, RACE) %>%
+  group_by(STUDY, RACE) %>%
+  summarise(n = n(), .groups = "drop")
+
+race_total <- alle_data_logtrans_clean_age%>%
+  distinct(PT, RACE) %>%
+  group_by(RACE) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(STUDY = "TOTAL")
+
+race_result <- bind_rows(race_counts, race_total)
+
+sex_result
+age_result
+race_result
+```
+
+```{r}
+library(dplyr)
+alle_data_logtrans_clean_age%>%
+  filter(is.na(AGE))%>%
+  select(STUDY, AGE, age)%>%
+  distinct()
+
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age%>%
+  mutate(AGE = if_else(STUDY == "NCT03135834" & is.na(AGE), age, AGE))
+
+alle_data_logtrans_clean_age%>%
+  filter(STUDY =="NCT03135834") %>%
+  select(STUDY, AGE, age) %>%
+  distinct()
+
+unique(alle_data_logtrans_clean_age$RACE)
+lf_RACE <- subset(alle_data_logtrans_clean_age, RACE == "LF")
+lf_nct <- subset(alle_data_logtrans_clean_age, STUDY == "NCT03135834" & RACE == "LF")
+nrow(lf_nct)
+
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age%>%
+  mutate(RACE = case_when(
+    RACE == "White" ~ "WHITE",
+    RACE == "BLACK" ~ "BLACK OR AFRICAN AMERICAN",
+    RACE %in% c("LF", "MULTIPLE") ~ "OTHER", 
+    TRUE ~ RACE
+  ))
+
+unique(alle_data_logtrans_clean_age$CPEVENT)
+```
+
+#FOREST PLOT: MEAN DIFFERENCE M-F (VALN LOG waarden) 
+#Descriptive meta-analysis (restricted to early timepoints)
+```{r}
+install.packages(c("dplyr", "metafor"))
+library(dplyr)
+library(tidyr)
+library(metafor)
+
+#STEP 1: Data filtering
+subset_data_FP1 <- alle_data_logtrans_clean_age %>%
+  filter(CPEVENT %in% c(
+    "1 Month after Dose 1", "1 Month after Dose 2", "1 Month after Dose 3"),
+    GROUP_DOSIS != "Placebo", 
+    !is.na(SEX), 
+    SEX %in% c("F", "M"), 
+    !is.na(VALN_LOG10)
+  )
+
+#STEP 2: Summarize per study
+test_data_FP1 <- subset_data_FP1 %>%
+  group_by(STUDY, CPEVENT, AGE, DOSING_SCHEME_GROUP, ASSAYCD, SEX) %>%
+  summarise(
+    mean_val = mean(VALN_LOG10, na.rm = TRUE),
+    sd_val = sd(VALN_LOG10, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+#STEP 3: Reshape to wide format
+wide_data <- test_data_FP1 %>%
+  pivot_wider(names_from = SEX, values_from = c(mean_val, sd_val, n))
+wide_data <- wide_data %>%
+  filter(
+    !is.na(mean_val_F), !is.na(mean_val_M),
+    !is.na(sd_val_F), !is.na(sd_val_M),
+    !is.na(n_F), !is.na(n_M)
+  )
+
+#STEP 4: Calculate effect sizes (mean difference M-F)
+es_data <- escalc(
+  measure = "MD",
+  m1i = mean_val_M, sd1i = sd_val_M, n1i = n_M,
+  m2i = mean_val_F, sd2i = sd_val_F, n2i = n_F,
+  data = wide_data
+)
+
+#STEP 5: Meta-analysis model with random effects, yi = calculated effect sizes, vi = sample variances
+study_level <- es_data %>%
+  group_by(STUDY)%>%
+  summarise(
+    yi = mean(yi, na.rm = TRUE),
+    vi = mean(vi, na.rm = TRUE),
+    n_total = sum(n_F + n_M, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+res_study <- rma(yi, vi, data = study_level, method = "REML")
+pred_study <- predict(res_study)
+
+
+#STEP 6: Weights & totals
+weights <- weights(res_study)
+weights_perc <- weights / sum(weights) * 100
+
+total_N <- sum(es_data$n_F + es_data$n_M)
+
+
+#STEP 7: Heterogeneity statistics
+I2 <- res_study$I2
+tau2 <- res_study$tau2
+H <- sqrt(res_study$QE / (res_study$k -1))
+pred <- predict(res_study)
+
+#STEP 8: Forest plot
+tiff(filename = "forest_plot_17JUN2026.tiff", width = 2000, height = 1400, res = 300)
+
+forest(res_study,
+       slab = study_level$STUDY,
+       xlab = "Mean Difference\n(Female (left) - Male(right))", 
+       ilab = cbind(study_level$n_total, sprintf("%.1f%%", weights_perc)),
+       xlim = c(-0.9, 0.6), 
+       ylim = c(-8, nrow(study_level) + 4),
+       ilab.xpos = c(-0.52, -0.32),
+       alim = c(-0.25, 0.15),
+       header = FALSE,
+       refline = 0,
+       cex = 0.8)
+
+#STEP 9: Column headers
+text(-0.82, nrow(study_level) + 2.7, "Study", font = 2)
+text(-0.52, nrow(study_level) + 2.7, "N", font = 2)
+text(-0.32, nrow(study_level) + 2.7, "Weight", font = 2)
+text(0.46, nrow(study_level) + 2.7, "MD [95% CI]", font = 2)
+
+#Total random effects model
+text(-0.35, -1, total_N, cex = 0.8)
+
+#Heterogeneity stats
+y_base <- -5.5
+
+text(-0.6, y_base, paste0 ("I² = ", round(I2, 1), "% Tau² = ", formatC(tau2, format="e", digits = 1), " H = ", round(H,3)), cex = 0.8)
+text(-0.6, y_base - 1, paste0 ("95% PI = [", round(pred_study$pi.lb, 3), ", ", round(pred_study$pi.ub, 3), "]"), cex = 0.8) 
+text(-0.6, y_base - 2, bquote(italic(p) == .(signif(res_study$QEp, 3))), cex = 0.8) 
+
+dev.off
+```
+
+```{r}
+#Meta regression with study-level moderators
+es_data$AGE <- relevel(factor(es_data$AGE), ref = "10-19")
+es_data$DOSING_SCHEME_GROUP <- relevel(factor(es_data$DOSING_SCHEME_GROUP), ref = "GROUP 1")
+
+res_meta_reg_full <- rma(
+  yi, vi, mods = ~ factor(CPEVENT) + factor(AGE) + factor(DOSING_SCHEME_GROUP) + factor(ASSAYCD), 
+  data = es_data,
+  method="REML"
+)
+summary(res_meta_reg_full)
+
+table (es_data$AGE)
+aggregate(yi ~ AGE, data=es_data, mean)
+es_data%>%
+  group_by(AGE) %>%
+  summarise(
+    mean_md = mean(yi), 
+    n= n()
+  )
+```
+
+```{r}
+#Funnel plot + Egger's test
+library(metafor)
+
+regtest(res_study, model = "lm")
+
+tiff("funnel_plot_17JUN2026.tiff", width = 1800, height = 1400, res = 300)
+funnel(res_study,
+       xlab = "Mean Difference (Female-Male)")
+dev.off
+```
+
+#Assessing confounding factors
+##PLOT 1: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY (With RACE) - Suppl Fig S3
+```{r}
+install.packages("ggtext")
+install.packages("broom.mixed")
+install.packages("lmerTest")
+library(lmerTest)
+library(broom.mixed)
+library(ggtext)
+library(gridExtra) 
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+library(forcats)
+library(lme4)
+library(broom.mixed)
+library(stringr)
+
+##Factor setting
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$RACE <-
+  relevel(factor(alle_data_logtrans_clean_age$RACE), ref = "WHITE")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+table(alle_data_logtrans_clean_age$CPEVENT)
+
+##Mixed (fixed) model
+model_cont_data_withRACE <- 
+  lmer(VALN_LOG10 ~ CPEVENT + ASSAYCD + SEX + AGE + RACE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = alle_data_logtrans_clean_age)
+summary(model_cont_data_withRACE)
+
+##Tidy model
+tidy_model_1 <- tidy(model_cont_data_withRACE, effects = "fixed", conf.int = TRUE)
+
+##Label cleaning
+tidy_model_refined <- tidy_model_1 %>%
+  mutate(term_clean = case_when(
+    term == "AGE>18" ~ "Age: >18", 
+    term == "AGE20-29" ~ "Age: 20-29", 
+    term == "SEXM" ~ "Sex: Male", 
+    term == "RACEOTHER" ~ "Race: Other", 
+    term == "RACEASIAN" ~ "Race: Asian", 
+    term == "RACEBLACK OR AFRICAN AMERICAN" ~ "Race: Black or African American",
+    term == "CPEVENTPredose 2" ~ "Predose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2", 
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+##Formatting output
+tidy_model_refined <- tidy_model_refined %>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+##Ordering terms
+tidy_model_refined <- tidy_model_refined%>%
+  mutate(term_clean = factor(term_clean, levels = c("Sex: Male", setdiff(unique(term_clean), "Sex: Male"))))
+
+##Forest plot
+PLOT1_with_RACE <- 
+  ggplot(tidy_model_refined, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 2, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_y_discrete(limits = rev(levels(tidy_model_refined$term_clean))) + 
+  theme_minimal(base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), axis.title.y = element_text(face = "bold"), plot.margin = margin(20,20,20,20)) +
+  theme(
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12), 
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(x = expression(bold("Estimate (log10)")), y = expression(bold("Covariate")))
+
+text_panel_PLOT1 <-
+  ggplot(tidy_model_refined, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(tidy_model_refined$term_clean)), drop = FALSE) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_PLOT1 <-
+  plot_grid(PLOT1_with_RACE, text_panel_PLOT1, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_PLOT1 <- 
+  ggdraw(plot_combined_PLOT1) + 
+  draw_text("Estimate", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT1_16SEP2026.tiff", final_plot_PLOT1, width = 14, height = 8)
+```
+
+##SUBSETS 2D and 3D
+```{r}
+alle_data_logtrans_clean_age_2D <- alle_data_logtrans_clean_age %>%
+  filter(DOSING_SCHEME_GROUP %in% c("GROUP 3", "GROUP 4", "GROUP 5"))%>%
+  droplevels()
+
+alle_data_logtrans_clean_age_3D <- alle_data_logtrans_clean_age %>%
+  filter(DOSING_SCHEME_GROUP %in% c("GROUP 1", "GROUP 2"))%>%
+  droplevels()
+
+table(alle_data_logtrans_clean_age_2D$DOSING_SCHEME_GROUP)
+table(alle_data_logtrans_clean_age_3D$DOSING_SCHEME_GROUP)
+```
+
+##PLOT 2: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY (Without RACE) - Manuscript Fig 2
+```{r}
+#install.packages("ggtext")
+#install.packages("broom.mixed")
+install.packages("lmerTest")
+library(lmerTest)
+#library(broom.mixed)
+#library(ggtext)
+#library(gridExtra) 
+#library(dplyr)
+#library(ggplot2)
+#library(cowplot)
+#library(forcats)
+#library(lme4)
+#library(broom.mixed)
+#library(stringr)
+
+##Factor setting
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+##Mixed (fixes) model
+model_cont_data_withoutRACE <- 
+  lmer(VALN_LOG10 ~ CPEVENT + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = alle_data_logtrans_clean_age)
+summary(model_cont_data_withoutRACE)
+
+class(model_cont_data_withoutRACE)
+VarCorr(model_cont_data_withoutRACE)
+summary(model_cont_data_withoutRACE)
+sigma(model_cont_data_withoutRACE)
+
+##Tidy model
+tidy_model_2 <- tidy(model_cont_data_withoutRACE, effects = "fixed", conf.int = TRUE)
+
+##Label cleaning
+tidy_model_refined_2 <- tidy_model_2 %>%
+  mutate(term_clean = case_when(
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",
+    term == "AGE4" ~ "Age: > 18 vs 10-19", 
+    term == "SEXM" ~ "Sex: Male", 
+    term == "CPEVENTPredose 2" ~ "Predose 2", 
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after booster (3-dose schedule)" ~ "1 Month after booster (3-dose schedule)",
+    term == "CPEVENT12 Months after booster (2-dose schedule)" ~ "12 Months after booster (2-dose schedule)",
+    term == "CPEVENT12 Months after booster (3-dose schedule)" ~ "12 Months after booster (3-dose schedule)",
+    term == "CPEVENT26 Months after booster (2-dose schedule)" ~ "26 Months after booster (2-dose schedule)",
+    term == "CPEVENT26 Months after booster (3-dose schedule)" ~ "26 Months after booster (3-dose schedule)",
+    term == "CPEVENTBefore Booster Vaccination" ~ "Prebooster", 
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+##Formatting output
+tidy_model_refined_2 <- tidy_model_refined_2 %>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+##Ordering terms
+tidy_model_refined_2 <- tidy_model_refined_2%>%
+  mutate(term_clean = factor(term_clean, levels = c("Sex: Male", setdiff(unique(term_clean), "Sex: Male"))))
+
+##Forest plot
+PLOT2_without_RACE <- 
+  ggplot(tidy_model_refined_2, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 2, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_y_discrete(limits = rev(levels(tidy_model_refined_2$term_clean))) + 
+  theme_minimal(base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), axis.title.y = element_text(face = "bold"), plot.margin = margin(20,20,20,20)) +
+  theme(
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12), 
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(x = expression(bold("Estimate (log10)")), y = expression(bold("Covariate")))
+
+text_panel_PLOT2 <-
+  ggplot(tidy_model_refined_2, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(tidy_model_refined_2$term_clean)), drop = FALSE) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_PLOT2 <-
+  plot_grid(PLOT2_without_RACE, text_panel_PLOT2, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_PLOT2 <- 
+  ggdraw(plot_combined_PLOT2) + 
+  draw_text("Estimate", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT2_16SEP2026.tiff", final_plot_PLOT2, width = 14, height = 8)
+```
+
+##Collinearity check
+```{r}
+library(car)
+install.packages("performance")
+library(performance)
+model_vif <- lmer(VALN_LOG10 ~ CPEVENT + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = alle_data_logtrans_clean_age)
+
+check_collinearity(model_vif)
+```
+
+##PLOT 3.1: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY (PER STUDY, Without RACE, 1 maand na dosis 2) - Suppl Fig 5.1
+```{r}
+#library(dplyr)
+#library (lme4)
+#library (lmerTest)
+#library(stringr)
+library(broom)
+#library(ggplot2)
+#library(cowplot)
+library(emmeans)
+
+subset_data <- alle_data_logtrans_clean_age_2D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX), 
+         !is.na(VALN_LOG10))
+
+subset_data$SEX <- relevel(factor(subset_data$SEX), ref = "F")
+
+model_global_withoutRACE_3 <- 
+  lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + (1 | STUDY/PT), data = subset_data)
+
+formula(model_global_withoutRACE_3)
+
+summary(model_global_withoutRACE_3)
+
+emm <- emmeans(model_global_withoutRACE_3, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP"))
+
+contrast_df <- summary(contrast(emm, method = "revpairwise"), infer = TRUE) %>%
+    mutate(STUDY = as.character(STUDY), 
+           estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", asymp.LCL), ", ", sprintf("%.2f", asymp.UCL), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+library(metafor)
+res_meta <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df,
+  method = "REML"
+)
+
+pooled_row <- data.frame(
+  contrast = "M-F", 
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta$b), 
+  SE = res_meta$se, 
+  df = NA, 
+  asymp.LCL = res_meta$ci.lb,
+  asymp.UCL = res_meta$ci.ub, 
+  z.ratio = NA,
+  p.value = res_meta$pval,
+  estimate_txt = sprintf("%.2f", res_meta$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta$ci.lb), ", ", sprintf("%.2f", res_meta$ci.ub), "]"), 
+  p_txt = ifelse(res_meta$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta$pval)))
+)
+
+contrast_df2 <- rbind(contrast_df, pooled_row)
+contrast_df2$sort_order <- contrast_df2$estimate
+contrast_df2$sort_order[contrast_df2$STUDY == "Pooled estimate"] <- Inf
+
+plot_forest_3 <-
+  ggplot(contrast_df2, aes(x = estimate, y = reorder(STUDY, sort_order))) + 
+  geom_point(data = subset(contrast_df2, STUDY != "Pooled estimate"), size = 3, color = "blue") + 
+  geom_point(data = subset(contrast_df2, STUDY == "Pooled estimate"), size = 5, color = "black")+
+  geom_errorbar(aes(xmin = asymp.LCL, xmax = asymp.UCL), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_3 <- 
+  ggplot(contrast_df2, aes (y = reorder(STUDY, sort_order)))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+final_plot_3 <-
+  plot_grid(plot_forest_3, text_panel_3, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_3 <-
+  ggdraw(final_plot_3) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT3.1_16SEP2026.tiff", final_plot_3, width = 14, height = 8)
+```
+
+##PLOT 3.2: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY (PER STUDY, Without RACE, 1 maand na dosis 2)- Suppl Fig 5.2
+```{r}
+#library(dplyr)
+#library (lme4)
+#library (lmerTest)
+#library(stringr)
+library(broom)
+#library(ggplot2)
+#library(cowplot)
+library(emmeans)
+
+subset_data <- alle_data_logtrans_clean_age_3D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX), 
+         !is.na(VALN_LOG10))
+
+subset_data$SEX <- relevel(factor(subset_data$SEX), ref = "F")
+
+model_global_withoutRACE_3 <- 
+  lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = subset_data)
+
+formula(model_global_withoutRACE_3)
+
+summary(model_global_withoutRACE_3)
+
+emm <- emmeans(model_global_withoutRACE_3, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+
+contrast_df <- summary(contrast(emm, method = "revpairwise"), infer = TRUE) %>%
+    mutate(STUDY = as.character(STUDY), 
+           estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", asymp.LCL), ", ", sprintf("%.2f", asymp.UCL), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+library(metafor)
+res_meta <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df,
+  method = "REML"
+)
+
+pooled_row <- data.frame(
+  contrast = "M-F", 
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta$b), 
+  SE = res_meta$se, 
+  df = NA, 
+  asymp.LCL = res_meta$ci.lb,
+  asymp.UCL = res_meta$ci.ub, 
+  z.ratio = NA,
+  p.value = res_meta$pval,
+  estimate_txt = sprintf("%.2f", res_meta$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta$ci.lb), ", ", sprintf("%.2f", res_meta$ci.ub), "]"), 
+  p_txt = ifelse(res_meta$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta$pval)))
+)
+
+contrast_df2 <- rbind(contrast_df, pooled_row)
+contrast_df2$sort_order <- contrast_df2$estimate
+contrast_df2$sort_order[contrast_df2$STUDY == "Pooled estimate"] <- Inf
+
+plot_forest_3 <-
+  ggplot(contrast_df2, aes(x = estimate, y = reorder(STUDY, sort_order))) + 
+  geom_point(data = subset(contrast_df2, STUDY != "Pooled estimate"), size = 3, color = "blue") + 
+  geom_point(data = subset(contrast_df2, STUDY == "Pooled estimate"), size = 5, color = "black")+
+  geom_errorbar(aes(xmin = asymp.LCL, xmax = asymp.UCL), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_3 <- 
+  ggplot(contrast_df2, aes (y = reorder(STUDY, sort_order)))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+final_plot_3 <-
+  plot_grid(plot_forest_3, text_panel_3, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_3 <-
+  ggdraw(final_plot_3) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT3.2_16SEP2026.tiff", final_plot_3, width = 14, height = 8)
+```
+
+##PLOT 4: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY (PER STUDY, Without RACE, 1 maand na dosis 3) - Manuscript Fig 3
+```{r}
+subset_data <- alle_data_logtrans_clean_age%>%
+  filter(CPEVENT == "1 Month after Dose 3",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX), 
+         !is.na(VALN_LOG10))
+
+subset_data$SEX <- relevel(factor(subset_data$SEX), ref = "F")
+
+model_global_withoutRACE_3 <- 
+  lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = subset_data)
+
+summary(model_global_withoutRACE_3)
+
+emm_2 <- emmeans(model_global_withoutRACE_3, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+
+contrast_df_2 <- summary(contrast(emm_2, method = "revpairwise"), infer = TRUE) %>%
+    mutate(STUDY = as.character(STUDY), 
+           estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", asymp.LCL), ", ", sprintf("%.2f", asymp.UCL), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+library(metafor)
+res_meta_2 <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df_2,
+  method = "REML"
+)
+
+pooled_row_2 <- data.frame(
+  contrast = "M-F", 
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta_2$b), 
+  SE = res_meta_2$se, 
+  df = NA, 
+  asymp.LCL = res_meta_2$ci.lb,
+  asymp.UCL = res_meta_2$ci.ub, 
+  z.ratio = NA,
+  p.value = res_meta_2$pval,
+  estimate_txt = sprintf("%.2f", res_meta_2$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta_2$ci.lb), ", ", sprintf("%.2f", res_meta_2$ci.ub), "]"), 
+  p_txt = ifelse(res_meta_2$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta_2$pval)))
+)
+
+contrast_df3 <- rbind(contrast_df_2, pooled_row_2)
+contrast_df3$sort_order <- contrast_df3$estimate
+contrast_df3$sort_order[contrast_df3$STUDY == "Pooled estimate"] <- Inf
+
+plot_forest_3 <-
+  ggplot(contrast_df3, aes(x = estimate, y = reorder(STUDY, sort_order))) + 
+  geom_point(data = subset(contrast_df3, STUDY != "Pooled estimate"), size = 3, color = "blue") + 
+  geom_point(data = subset(contrast_df3, STUDY == "Pooled estimate"), size = 5, color = "black")+
+  geom_errorbar(aes(xmin = asymp.LCL, xmax = asymp.UCL), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_3 <- 
+  ggplot(contrast_df3, aes (y = reorder(STUDY, sort_order)))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+final_plot_3 <-
+  plot_grid(plot_forest_3, text_panel_3, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_3 <-
+  ggdraw(final_plot_3) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT4_17JUN2026.tiff", final_plot_3, width = 14, height = 8)
+```
+
+##PLOT 5: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY - WITH IMPUTATION (Incl. RACE) - Suppl Fig 4
+```{r}
+#library(lmerTest)
+#library(broom.mixed)
+#library(dplyr)
+#library(ggplot2)
+#library(cowplot)
+#library(lme4)
+#library(stringr)
+#library(mice)
+#library(gridExtra)
+#library(ggtext)
+
+alle_data_logtrans_clean_age <- droplevels(alle_data_logtrans_clean_age)
+
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$RACE <-
+  relevel(factor(alle_data_logtrans_clean_age$RACE), ref = "WHITE")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+vars <- c("VALN_LOG10", "CPEVENT", "ASSAYCD", "SEX", "AGE", "RACE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS", "STUDY", "PT")
+data_subset <- alle_data_logtrans_clean_age[vars]
+
+imp <- mice(data_subset, m = 5, method = 'pmm', seed = 123)
+summary(imp)
+
+#library(lattice)
+#imp$predictorMatrix
+#imp$maxit
+#mice::plot.mids(imp)
+#stripplot(imp)
+#class(imp)
+
+fit <- with(imp, lmer(VALN_LOG10 ~ CPEVENT + RACE + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT)))
+
+pooled <- pool(fit)
+pooled_df_withRACE <- summary(pooled)%>%
+  mutate(conf.low = estimate - 1.96 * std.error, conf.high = estimate + 1.96 * std.error)
+
+pooled_df_withRACE <- pooled_df_withRACE%>%
+  mutate(term_clean = case_when(
+    term == "AGE4" ~ "Age: >18 vs 10-19", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",     
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "SEXM" ~ "Sex: Male", 
+    term == "RACEOTHER" ~ "Race: Other", 
+    term == "RACEASIAN" ~ "Race: Asian", 
+    term == "RACEBLACK OR AFRICAN AMERICAN" ~ "Race: Black or African American",
+    term == "CPEVENTPredose 2" ~ "Predose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after booster (3-dose schedule)" ~ "1 Month after booster (3-dose schedule)",
+    term == "CPEVENT12 Months after booster (2-dose schedule)" ~ "12 Months after booster (2-dose schedule)",
+    term == "CPEVENT12 Months after booster (3-dose schedule)" ~ "12 Months after booster (3-dose schedule)",
+    term == "CPEVENT26 Months after booster (2-dose schedule)" ~ "26 Months after booster (2-dose schedule)",
+    term == "CPEVENT26 Months after booster (3-dose schedule)" ~ "26 Months after booster (3-dose schedule)",
+    term == "CPEVENTBefore Booster Vaccination" ~ "Before booster",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3",
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1",
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2",
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))%>%
+  
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))), 
+                   is_bold = term_clean == "Sex: Male")
+
+lvl <- unique(pooled_df_withRACE$term_clean)
+lvl <- c("Sex: Male", lvl [lvl != "Sex: Male"])
+
+pooled_df_withRACE$term_clean <- factor(pooled_df_withRACE$term_clean, levels = lvl) 
+
+PLOT4 <- 
+  ggplot(pooled_df_withRACE, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 2, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_y_discrete(limits = rev(levels(pooled_df_withRACE$term_clean))) + 
+  theme_minimal(base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), axis.title.y = element_text(face = "bold"), plot.margin = margin(20,20,20,20)) +
+  theme(
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12), 
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(x = expression(bold("Estimate (log10)")), y = expression(bold("Covariate")))
+
+text_panel_PLOT4 <-
+  ggplot(pooled_df_withRACE, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(pooled_df_withRACE$term_clean)), drop = FALSE) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_PLOT4 <-
+  plot_grid(PLOT4, text_panel_PLOT4, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_PLOT4 <- 
+  ggdraw(plot_combined_PLOT4) + 
+  draw_text("Estimate", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT5_16SEP2026.tiff", final_plot_PLOT4, width = 14, height = 8)
+```
+
+##PLOT 6: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY - WITH IMPUTATION (Excl. RACE) - Not in manuscript or supplementary data
+```{r}
+subset_data_plot5 <- alle_data_logtrans_clean_age %>%
+  mutate(
+    CPEVENT = case_when(
+      CPEVENT == "1 Month after booster vaccination" ~ "1 Month after booster vaccination",
+      CPEVENT == "1 Month after booster Vaccination" ~ "1 Month after booster vaccination",
+      TRUE ~ CPEVENT))
+
+subset_data_plot5 <- droplevels(subset_data_plot5)
+
+subset_data_plot5$CPEVENT<-
+  relevel(factor(subset_data_plot5$CPEVENT), ref = "Predose 1")
+subset_data_plot5$SEX <-
+  relevel(factor(subset_data_plot5$SEX), ref = "F")
+subset_data_plot5$DOSING_SCHEME_GROUP <-
+  relevel(factor(subset_data_plot5$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+subset_data_plot5$ASSAYCD <-
+  relevel(factor(subset_data_plot5$ASSAYCD), ref = "A22")
+subset_data_plot5$GROUP_DOSIS <-
+  relevel(factor(subset_data_plot5$GROUP_DOSIS), ref = "Placebo")
+subset_data_plot5$AGE <-
+  factor(subset_data_plot5$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(subset_data_plot5$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+vars_5 <- c("VALN_LOG10", "CPEVENT", "ASSAYCD", "SEX", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS", "STUDY", "PT")
+data_subset_5 <- subset_data_plot5[vars_5]
+
+imp_5 <- mice(data_subset_5, m = 5, method = 'pmm', seed = 123)
+summary(imp_5)
+
+#imp_5$predictorMatrix
+#imp_5$maxit
+#mice::plot.mids(imp_5)
+#stripplot(imp)
+#class(imp_5)
+
+fit_5 <- with(imp_5, lmer(VALN_LOG10 ~ CPEVENT + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT)))
+
+pooled_5 <- pool(fit_5)
+pooled_df_withoutRACE <- summary(pooled_5)%>%
+  mutate(conf.low = estimate - 1.96 * std.error, conf.high = estimate + 1.96 * std.error)
+
+pooled_df_withoutRACE <- pooled_df_withoutRACE%>%
+  mutate(term_clean = case_when(
+    term == "AGE4" ~ "Age: >18 vs 10-19", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",     
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "SEXM" ~ "Sex: Male", 
+    term == "CPEVENTPredose 2" ~ "Predose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster vaccination" ~ "1 Month after booster", 
+    term == "CPEVENTBefore Booster Vaccination" ~ "Before booster",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT26 Months after booster vaccination" ~ "26 Months after booster",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3",
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1",
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2",
+    term == "CPEVENT12 Months after booster vaccination" ~ "12 Months after booster",
+    term == "CPEVENT1 Months after booster vaccination" ~ "1 Month after booster",
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))%>%
+  
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))), 
+                   is_bold = term_clean == "Sex: Male")
+
+lvl <- unique(pooled_df_withoutRACE$term_clean)
+lvl <- c("Sex: Male", lvl [lvl != "Sex: Male"])
+
+pooled_df_withoutRACE$term_clean <- factor(pooled_df_withoutRACE$term_clean, levels = lvl) 
+
+PLOT5 <- 
+  ggplot(pooled_df_withoutRACE, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 2, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_y_discrete(limits = rev(levels(pooled_df_withoutRACE$term_clean))) + 
+  theme_minimal(base_family = "Arial") +
+  theme(text = element_text(family = "Arial"), axis.title.y = element_text(face = "bold"), plot.margin = margin(20,20,20,20)) +
+  theme(
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12), 
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(x = expression(bold("Estimate (log10)")), y = expression(bold("Covariate")))
+
+text_panel_PLOT5 <-
+  ggplot(pooled_df_withoutRACE, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(pooled_df_withoutRACE$term_clean)), drop = FALSE) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_PLOT5 <-
+  plot_grid(PLOT5, text_panel_PLOT5, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_PLOT5 <- 
+  ggdraw(plot_combined_PLOT5) + 
+  draw_text("Estimate", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT6_17JUN2026.tiff", final_plot_PLOT5, width = 14, height = 8)
+```
+
+##PLOT 7: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY - PER STUDY, 1 Month after D3, WITH IMPUTATION INCL. RACE, with RUBIN correction) - Suppl Fig 6
+```{r}
+library(broom)
+library(cowplot)
+library(emmeans)
+
+subset_data_PLOT6 <- alle_data_logtrans_clean_age%>%
+  filter(CPEVENT == "1 Month after Dose 3",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT6 <- droplevels(subset_data_PLOT6)
+subset_data_PLOT6$SEX <- relevel(factor(subset_data_PLOT6$SEX), ref = "F")
+
+imp_6_lmer <- mice(subset_data_PLOT6, m = 5, method = 'pmm', seed = 123)
+fit_imp_6_lmer <- with(imp_6_lmer, lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT)))
+
+
+#imp_6$predictorMatrix
+#imp_6$maxit
+#mice::plot.mids(imp_6)
+#stripplot(imp_6)
+#class(imp_6)
+
+emm_list_6_lmer <- 
+  lapply(fit_imp_6_lmer$analyses, function(mod) {
+    emm_6_lmer <- emmeans(mod, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+    summary(contrast(emm_6_lmer, method = "revpairwise"), infer = TRUE)
+  })
+
+combined_results_6_lmer <- bind_rows(emm_list_6_lmer, .id = "imp") %>%
+  mutate(
+    SE = (asymp.UCL - asymp.LCL) / (2*1.96)
+  )
+
+combined_results_6_lmer_RUBIN <- combined_results_6_lmer%>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(estimate),
+    U_bar = mean(SE^2),
+    B = var(estimate),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = Q_bar,
+    lower = Q_bar - 1.96 * SE_total,
+    upper = Q_bar + 1.96 * SE_total,
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    .groups = "drop")
+
+contrast_df_6 <- combined_results_6_lmer_RUBIN %>%
+  mutate(estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_6$SE <- (contrast_df_6$upper - contrast_df_6$lower) / (2*1.96)
+
+res_meta_6 <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df_6,
+  method = "REML"
+)
+
+contrast_df_6 <- contrast_df_6 %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, estimate_txt, ci_txt, p_txt, SE)
+  
+  
+pooled_row_6 <- data.frame(
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta_6$b), 
+  lower = res_meta_6$ci.lb,
+  upper = res_meta_6$ci.ub, 
+  p.value = res_meta_6$pval, 
+  estimate_txt = sprintf("%.2f", res_meta_6$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta_6$ci.lb), ", ", sprintf("%.2f", res_meta_6$ci.ub), "]"), 
+  p_txt = ifelse(res_meta_6$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta_6$pval))),
+  SE = res_meta_6$se)
+
+pooled_row_6 <- pooled_row_6 [, colnames(contrast_df_6)]
+
+contrast_df_6 <- rbind(contrast_df_6, pooled_row_6)
+
+contrast_df_6$sort_order <- contrast_df_6$estimate
+contrast_df_6$sort_order[contrast_df_6$STUDY == "Pooled estimate"] <- Inf
+contrast_df_6 <- contrast_df_6[order(contrast_df_6$sort_order), ]
+contrast_df_6$STUDY <- factor(contrast_df_6$STUDY, levels = contrast_df_6$STUDY)
+
+contrast_df_6$point_color <- ifelse(
+  contrast_df_6$STUDY == "Pooled estimate", 
+  "pooled", 
+  "study"
+)
+
+plot_forest_6 <-
+  ggplot(contrast_df_6, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color))+
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black")) + 
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(legend.position = "none")+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_6 <- 
+  ggplot(contrast_df_6, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  
+  theme_void() 
+
+final_plot_6 <-
+  plot_grid(plot_forest_6, text_panel_6, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_6 <-
+  ggdraw(final_plot_6) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT7_17JUN2026_lmer_RUBIN.tiff", final_plot_6, width = 14, height = 8)
+```
+
+##PLOT 8.1: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY - PER STUDY, 1 Month after D2, WITH IMPUTATION INCL. RACE, with RUBIN correction) Suppl Fig 7.1
+```{r}
+library(broom)
+library(cowplot)
+library(emmeans)
+
+subset_data_PLOT8 <- alle_data_logtrans_clean_age_2D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT8 <- droplevels(subset_data_PLOT8)
+subset_data_PLOT8$SEX <- relevel(factor(subset_data_PLOT8$SEX), ref = "F")
+
+imp_8_lmer <- mice(subset_data_PLOT8, m = 5, method = 'pmm', seed = 123)
+fit_imp_8_lmer <- with(imp_8_lmer, lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + (1 | STUDY/PT)))
+
+#imp_8$predictorMatrix
+#imp_8$maxit
+#mice::plot.mids(imp_8)
+#stripplot(imp_8)
+#class(imp_8)
+
+emm_list_8_lmer <- 
+  lapply(fit_imp_8_lmer$analyses, function(mod) {
+    emm_8_lmer <- emmeans(mod, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP"))
+    summary(contrast(emm_8_lmer, method = "revpairwise"), infer = TRUE)
+  })
+
+combined_results_8_lmer <- bind_rows(emm_list_8_lmer, .id = "imp") %>%
+  mutate(
+    SE = (asymp.UCL - asymp.LCL) / (2*1.96)
+  )
+
+combined_results_8_lmer_RUBIN <- combined_results_8_lmer%>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(estimate),
+    U_bar = mean(SE^2),
+    B = var(estimate),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = Q_bar,
+    lower = Q_bar - 1.96 * SE_total,
+    upper = Q_bar + 1.96 * SE_total,
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    .groups = "drop")
+
+contrast_df_8 <- combined_results_8_lmer_RUBIN %>%
+  mutate(estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_8$SE <- (contrast_df_8$upper - contrast_df_8$lower) / (2*1.96)
+
+res_meta_8 <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df_8,
+  method = "REML"
+)
+
+contrast_df_8 <- contrast_df_8 %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, estimate_txt, ci_txt, p_txt, SE)
+  
+pooled_row_8 <- data.frame(
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta_8$b), 
+  lower = res_meta_8$ci.lb,
+  upper = res_meta_8$ci.ub, 
+  p.value = res_meta_8$pval, 
+  estimate_txt = sprintf("%.2f", res_meta_8$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta_8$ci.lb), ", ", sprintf("%.2f", res_meta_8$ci.ub), "]"), 
+  p_txt = ifelse(res_meta_8$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta_8$pval))),
+  SE = res_meta_8$se)
+
+pooled_row_8 <- pooled_row_8 [, colnames(contrast_df_8)]
+
+contrast_df_8 <- rbind(contrast_df_8, pooled_row_8)
+
+contrast_df_8$sort_order <- contrast_df_8$estimate
+contrast_df_8$sort_order[contrast_df_8$STUDY == "Pooled estimate"] <- Inf
+contrast_df_8 <- contrast_df_8[order(contrast_df_8$sort_order), ]
+contrast_df_8$STUDY <- factor(contrast_df_8$STUDY, levels = contrast_df_8$STUDY)
+
+contrast_df_8$point_color <- ifelse(
+  contrast_df_8$STUDY == "Pooled estimate", 
+  "pooled", 
+  "study"
+)
+
+plot_forest_8 <-
+  ggplot(contrast_df_8, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color))+
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black")) + 
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(legend.position = "none")+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_8 <- 
+  ggplot(contrast_df_8, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+final_plot_8 <-
+  plot_grid(plot_forest_8, text_panel_8, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_8 <-
+  ggdraw(final_plot_8) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT8.1_16SEP2026_lmer_RUBIN.tiff", final_plot_8, width = 14, height = 8)
+```
+
+##PLOT 8.2: Adjusted IPD model - Mixed-effects model with clustering: PT nested in STUDY - PER STUDY, 1 Month after D2, WITH IMPUTATION INCL. RACE, with RUBIN correction) Suppl Fig 7.2
+```{r}
+library(broom)
+library(cowplot)
+library(emmeans)
+
+subset_data_PLOT8 <- alle_data_logtrans_clean_age_3D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT8 <- droplevels(subset_data_PLOT8)
+subset_data_PLOT8$SEX <- relevel(factor(subset_data_PLOT8$SEX), ref = "F")
+
+imp_8_lmer <- mice(subset_data_PLOT8, m = 5, method = 'pmm', seed = 123)
+fit_imp_8_lmer <- with(imp_8_lmer, lmer(VALN_LOG10 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT)))
+
+
+#imp_8$predictorMatrix
+#imp_8$maxit
+#mice::plot.mids(imp_8)
+#stripplot(imp_8)
+#class(imp_8)
+
+emm_list_8_lmer <- 
+  lapply(fit_imp_8_lmer$analyses, function(mod) {
+    emm_8_lmer <- emmeans(mod, specs = ~ SEX | STUDY, nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+    summary(contrast(emm_8_lmer, method = "revpairwise"), infer = TRUE)
+  })
+
+combined_results_8_lmer <- bind_rows(emm_list_8_lmer, .id = "imp") %>%
+  mutate(
+    SE = (asymp.UCL - asymp.LCL) / (2*1.96)
+  )
+
+combined_results_8_lmer_RUBIN <- combined_results_8_lmer%>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(estimate),
+    U_bar = mean(SE^2),
+    B = var(estimate),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = Q_bar,
+    lower = Q_bar - 1.96 * SE_total,
+    upper = Q_bar + 1.96 * SE_total,
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    .groups = "drop")
+
+contrast_df_8 <- combined_results_8_lmer_RUBIN %>%
+  mutate(estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"), 
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_8$SE <- (contrast_df_8$upper - contrast_df_8$lower) / (2*1.96)
+
+res_meta_8 <- rma(
+  yi = estimate, 
+  sei = SE, 
+  data = contrast_df_8,
+  method = "REML"
+)
+
+contrast_df_8 <- contrast_df_8 %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, estimate_txt, ci_txt, p_txt, SE)
+  
+pooled_row_8 <- data.frame(
+  STUDY = "Pooled estimate", 
+  estimate = as.numeric(res_meta_8$b), 
+  lower = res_meta_8$ci.lb,
+  upper = res_meta_8$ci.ub, 
+  p.value = res_meta_8$pval, 
+  estimate_txt = sprintf("%.2f", res_meta_8$b), 
+  ci_txt = paste0("[", sprintf("%.2f", res_meta_8$ci.lb), ", ", sprintf("%.2f", res_meta_8$ci.ub), "]"), 
+  p_txt = ifelse(res_meta_8$pval < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", res_meta_8$pval))),
+  SE = res_meta_8$se)
+
+pooled_row_8 <- pooled_row_8 [, colnames(contrast_df_8)]
+
+contrast_df_8 <- rbind(contrast_df_8, pooled_row_8)
+
+contrast_df_8$sort_order <- contrast_df_8$estimate
+contrast_df_8$sort_order[contrast_df_8$STUDY == "Pooled estimate"] <- Inf
+contrast_df_8 <- contrast_df_8[order(contrast_df_8$sort_order), ]
+contrast_df_8$STUDY <- factor(contrast_df_8$STUDY, levels = contrast_df_8$STUDY)
+
+contrast_df_8$point_color <- ifelse(
+  contrast_df_8$STUDY == "Pooled estimate", 
+  "pooled", 
+  "study"
+)
+
+plot_forest_8 <-
+  ggplot(contrast_df_8, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color))+
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black")) + 
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  theme(legend.position = "none")+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10))+
+  labs(title = "", x = expression(bold("Adjusted Estimate F - M (log10)")), y = "")
+
+text_panel_8 <- 
+  ggplot(contrast_df_8, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+final_plot_8 <-
+  plot_grid(plot_forest_8, text_panel_8, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_8 <-
+  ggdraw(final_plot_8) + 
+  draw_text("Estimate", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.90, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT8.2_16SEP2026_lmer_RUBIN.tiff", final_plot_8, width = 14, height = 8)
+```
+
+Additional checks
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+df <- alle_data_logtrans_clean_age
+
+selected_cols <- c("SEX", "AGE", "RACE", "GROUP_DOSIS", "DOSING_SCHEME_GROUP", "CPEVENT", "ASSAYCD")
+
+get_freq_by_study <-
+  # function(data, col) {
+    data %>% 
+      group_by(STUDY, !!sym(col)) %>%
+      summarise(count = n(), .groups = "drop") %>%
+      mutate(column = col, level = as.character(!!sym(col))) %>%
+      select(STUDY, column, level, count)
+  }
+
+summary_by_study <-
+  map_df(selected_cols, ~ get_freq_by_study (df, .x))
+
+na_counts <- map_df(selected_cols, function(col) {
+  df %>%
+    group_by(STUDY) %>%
+    summarise(count = sum(is.na(.data[[col]])), .groups = "drop") %>%
+    mutate(column = col, level = "NA") %>%
+    select(STUDY, column, level, count)
+})
+
+summary_by_study <-
+  bind_rows(summary_by_study, na_counts) %>%
+  arrange(STUDY, column, level)
+
+summary_by_study
+```
+
+```{r}
+race_missing_summary <- alle_data_logtrans_clean_age %>%
+  group_by(STUDY)%>%
+  summarise(total_rows = n(), missing_RACE = sum(is.na(RACE)), perc_missing_RACE = round((missing_RACE / total_rows) * 100, 2)) %>%
+  arrange(desc(missing_RACE))
+race_missing_summary
+```
+
+#Logistic models
+##PLOT1: BIN_MODEL - CONFOUNDING FACTORS - Suppl Fig 8
+```{r}
+#library(lme4)
+#library(broom.mixed)
+#library(dplyr)
+#library(ggplot2)
+#library(cowplot)
+#library(forcats)
+#library(stringr)
+#library(gridExtra)
+
+alle_data_logtrans_clean_age$IND4 <- as.factor(alle_data_logtrans_clean_age$IND4)
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$RACE <-
+  relevel(factor(alle_data_logtrans_clean_age$RACE), ref = "WHITE")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+model_bin_glmer <- 
+  glmmTMB(IND4 ~ CPEVENT + ASSAYCD + SEX + AGE + RACE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = alle_data_logtrans_clean_age, family = binomial(link = "logit"))
+summary(model_bin_glmer)
+
+tidy_bin <- broom.mixed::tidy(model_bin_glmer, effects = "fixed", conf.int = TRUE, exponentiate = TRUE) 
+
+tidy_bin <- tidy_bin%>%
+   mutate(term_clean = case_when(
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",
+    term == "AGE4" ~ "Age: > 18 vs 10-19",
+    term == "SEXM" ~ "Sex: Male", 
+    term == "RACEOTHER" ~ "Race: Other", 
+    term == "RACEASIAN" ~ "Race: Asian", 
+    term == "RACEBLACK OR AFRICAN AMERICAN" ~ "Race: Black or African American",
+    term == "CPEVENTPredose 2" ~ "Immediately before dose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2", 
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after booster (3-dose schedule)" ~ "1 Month after booster (3-dose schedule)",
+    term == "CPEVENT12 Months after booster (2-dose schedule)" ~ "12 Months after booster (2-dose schedule)",
+    term == "CPEVENT12 Months after booster (3-dose schedule)" ~ "12 Months after booster (3-dose schedule)",
+    term == "CPEVENT26 Months after booster (2-dose schedule)" ~ "26 Months after booster (2-dose schedule)",
+    term == "CPEVENT26 Months after booster (3-dose schedule)" ~ "26 Months after booster (3-dose schedule)",
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+tidy_bin <- tidy_bin%>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.01, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+tidy_bin <- tidy_bin %>%
+  filter(!term_clean %in% c(
+    "1 Month after booster (2-dose schedule)"
+  ))
+
+tidy_bin <- tidy_bin %>%
+  mutate(term_clean = factor(term_clean, levels = c("Sex: Male", setdiff(unique(term_clean), "Sex: Male"))))
+
+PLOT1_glmer <- 
+  ggplot(tidy_bin, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 3, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(levels(tidy_bin$term_clean)))+
+  theme_minimal (base_family = "Arial") + 
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +  
+  labs(title = "", x = expression(bold("Odds ratio")), y = expression(bold("Covariate")))
+
+text_panel_bin <-
+  ggplot(tidy_bin, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(tidy_bin$term_clean)), drop = FALSE) +
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_bin <-
+  plot_grid(PLOT1_glmer, text_panel_bin, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_glmer <- 
+  ggdraw(plot_combined_bin) + 
+  draw_text("OR", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT1_glmer_17SEP2026.tiff", final_plot_glmer, width = 14, height = 8)
+```
+
+##PLOT2: BIN_MODEL - WITHOUT RACE - Manuscript Fig 4
+```{r}
+alle_data_logtrans_clean_age$IND4 <- as.factor(alle_data_logtrans_clean_age$IND4)
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+model_bin_glmer_2 <- 
+  glmmTMB(IND4 ~ CPEVENT + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = alle_data_logtrans_clean_age, family = binomial(link = "logit"))
+summary(model_bin_glmer_2)
+
+tidy_bin_2 <- broom.mixed::tidy(model_bin_glmer_2, effects = "fixed", conf.int = TRUE, exponentiate = TRUE) 
+
+tidy_bin_2 <- tidy_bin_2%>%
+  mutate(term_clean = case_when(
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",
+    term == "AGE4" ~ "Age: > 18 vs 10-19", 
+    term == "SEXM" ~ "Sex: Male", 
+    term == "CPEVENTPredose 2" ~ "Predose 2", 
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2", 
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after booster (3-dose schedule)" ~ "1 Month after booster (3-dose schedule)",
+    term == "CPEVENT12 Months after booster (2-dose schedule)" ~ "12 Months after booster (2-dose schedule)",
+    term == "CPEVENT12 Months after booster (3-dose schedule)" ~ "12 Months after booster (3-dose schedule)",
+    term == "CPEVENT26 Months after booster (2-dose schedule)" ~ "26 Months after booster (2-dose schedule)",
+    term == "CPEVENT26 Months after booster (3-dose schedule)" ~ "26 Months after booster (3-dose schedule)",
+    term == "CPEVENTBefore Booster Vaccination" ~ "Prebooster", 
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+tidy_bin_2 <- tidy_bin_2%>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.01, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+tidy_bin_2 <- tidy_bin_2 %>%
+  filter(!term_clean %in% c(
+    "1 Month after booster (2-dose schedule)", "1 Month after booster (3-dose schedule)", "12 Months after booster (2-dose schedule)", "12 Months #after booster (3-dose schedule)", "26 Months after booster (2-dose schedule)", "26 Months after booster (3-dose schedule)"
+  ))
+
+tidy_bin_2 <- tidy_bin_2 %>%
+  mutate(term_clean = factor(term_clean, levels = c("Sex: Male", setdiff(unique(term_clean), "Sex: Male"))))
+
+PLOT2_glmer <- 
+  ggplot(tidy_bin_2, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 3, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(levels(tidy_bin_2$term_clean)))+
+  theme_minimal (base_family = "Arial") + 
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +  
+  labs(title = "", x = expression(bold("Odds ratio")), y = expression(bold("Covariate")))
+
+text_panel_bin_2 <-
+  ggplot(tidy_bin_2, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(tidy_bin_2$term_clean)), drop = FALSE) +
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  xlim(0.8, 4) + 
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_bin_2 <-
+  plot_grid(PLOT2_glmer, text_panel_bin_2, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_glmer_2 <- 
+  ggdraw(plot_combined_bin_2) + 
+  draw_text("OR", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT2_glmer_17SEP2026_with booster data.tiff", final_plot_glmer_2, width = 14, height = 8)
+
+library(emmeans)
+emmeans(model_bin_glmer_2, ~ SEX, 
+        type = "response",
+        nuisance = c("CPEVENT", "ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+```
+
+##PLOT3: BIN_MODEL - WITHOUT RACE, STUDY SPECIFIC (1M after D3) - Manuscript Fig 5
+```{r}
+#library(dplyr)
+#library(broom)
+#library(ggplot2)
+#library(cowplot)
+#library(emmeans)
+
+subset_data_PLOT3 <- alle_data_logtrans_clean_age%>%
+  filter(CPEVENT == "1 Month after Dose 3",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT3 <- droplevels(subset_data_PLOT3)
+subset_data_PLOT3$SEX <- relevel(factor(subset_data_PLOT3$SEX), ref = "F")
+
+model_bin_glmer_2 <- 
+  glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = subset_data_PLOT3, family = binomial(link = "logit"))
+
+emm_3 <- emmeans(model_bin_glmer_2, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+
+emmeans(model_bin_glmer_2, ~ SEX, 
+        type = "response",
+        nuisance = c("CPEVENT", "ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+
+contrast_df_3 <- summary(contrast(emm_3, method = "revpairwise"), infer = TRUE)
+
+contrast_df_3 <- contrast_df_3 %>%
+  mutate(estimate = odds.ratio, lower = asymp.LCL, upper = asymp.UCL)
+
+contrast_df_3$log_estimate <- log(contrast_df_3$estimate)
+contrast_df_3$log_lower <- log(contrast_df_3$lower)
+contrast_df_3$log_upper <- log(contrast_df_3$upper)
+
+contrast_df_3$SE <- (contrast_df_3$log_upper - contrast_df_3$log_lower) / (2*1.96)
+
+res_meta_3 <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_3,
+  method = "REML"
+)
+
+pooled_row_3 <- data.frame(
+  contrast = NA,
+  STUDY = "Pooled OR", 
+  odds.ratio = exp(res_meta_3$b),
+  SE =  res_meta_3$se,
+  df = NA,
+  asymp.LCL = exp(res_meta_3$ci.lb),
+  asymp.UCL = exp(res_meta_3$ci.ub), 
+  null = NA,
+  z.ratio = NA,
+  p.value = res_meta_3$pval,
+  estimate = exp(res_meta_3$b), 
+  lower = exp(res_meta_3$ci.lb),
+  upper = exp(res_meta_3$ci.ub), 
+ 
+  log_estimate = res_meta_3$b,
+  log_lower = res_meta_3$ci.lb,
+  log_upper = res_meta_3$ci.ub)
+
+contrast_df_3 <- rbind(contrast_df_3, pooled_row_3)
+
+contrast_df_3$estimate_txt = sprintf("%.2f", contrast_df_3$estimate) 
+contrast_df_3$ci_txt = paste0("[", sprintf("%.2f", contrast_df_3$lower), ", ", sprintf("%.2f", contrast_df_3$upper), "]") 
+contrast_df_3$p_txt = ifelse(contrast_df_3$p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", contrast_df_3$p.value)))
+
+contrast_df_3$sort_order <- contrast_df_3$estimate
+contrast_df_3$sort_order[contrast_df_3$STUDY == "Pooled OR"] <- Inf
+contrast_df_3 <- contrast_df_3[order(contrast_df_3$sort_order), ]
+contrast_df_3$STUDY <- factor(contrast_df_3$STUDY, levels = contrast_df_3$STUDY)
+
+contrast_df_3$point_color <- ifelse(
+  contrast_df_3$STUDY == "Pooled OR", 
+  "pooled", 
+  "study"
+)
+
+PLOT3_glm <-
+  ggplot(contrast_df_3, aes(x = estimate, y = STUDY)) + 
+  geom_point(color = "blue", size = 3) + 
+  geom_point(data = subset(contrast_df_3, STUDY == "Pooled OR"), color = "black", size = 5) +
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  theme(legend.position = "none")+
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT3_glm <- 
+  ggplot(contrast_df_3, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT3_combined_glm <-
+  plot_grid(PLOT3_glm, text_panel_PLOT3_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT3_final <-
+  ggdraw(PLOT3_combined_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT3_glm_17JUN2026.tiff", PLOT3_final, width = 14, height = 8)
+```
+
+##PLOT4.1 BIN_MODEL - WITHOUT RACE, STUDY SPECIFIC (1M after D2) Suppl Fig 10.1
+```{r}
+subset_data_PLOT4 <- alle_data_logtrans_clean_age_2D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT4 <- droplevels(subset_data_PLOT4)
+subset_data_PLOT4$SEX <- relevel(factor(subset_data_PLOT4$SEX), ref = "F")
+
+subset_data_PLOT4$IND4 <- factor(subset_data_PLOT4$IND4)
+
+model_bin_glmer_4 <- 
+  glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + (1 | STUDY/PT), data = subset_data_PLOT4, family = binomial(link = "logit"))
+
+emm <- emmeans(model_bin_glmer_4, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP"))
+
+contrast_df_4 <- summary(contrast(emm, method = "revpairwise"), infer = TRUE)
+
+contrast_df_4 <- contrast_df_4 %>%
+  mutate(estimate = odds.ratio, lower = asymp.LCL, upper = asymp.UCL)
+
+contrast_df_4$log_estimate <- log(contrast_df_4$estimate)
+contrast_df_4$log_lower <- log(contrast_df_4$lower)
+contrast_df_4$log_upper <- log(contrast_df_4$upper)
+
+contrast_df_4$SE <- (contrast_df_4$log_upper - contrast_df_4$log_lower) / (2*1.96)
+
+res_meta_4 <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_4,
+  method = "REML"
+)
+
+pooled_row_4 <- data.frame(
+  contrast = NA,
+  STUDY = "Pooled OR", 
+  odds.ratio = exp(res_meta_4$b),
+  SE =  res_meta_4$se,
+  df = NA,
+  asymp.LCL = exp(res_meta_4$ci.lb),
+  asymp.UCL = exp(res_meta_4$ci.ub), 
+  null = NA,
+  z.ratio = NA,
+  p.value = res_meta_4$pval,
+  estimate = exp(res_meta_4$b), 
+  lower = exp(res_meta_4$ci.lb),
+  upper = exp(res_meta_4$ci.ub), 
+ 
+  log_estimate = res_meta_4$b,
+  log_lower = res_meta_4$ci.lb,
+  log_upper = res_meta_4$ci.ub)
+
+contrast_df_4 <- rbind(contrast_df_4, pooled_row_4)
+
+contrast_df_4$estimate_txt = sprintf("%.2f", contrast_df_4$estimate) 
+contrast_df_4$ci_txt = paste0("[", sprintf("%.2f", contrast_df_4$lower), ", ", sprintf("%.2f", contrast_df_4$upper), "]") 
+contrast_df_4$p_txt = ifelse(contrast_df_4$p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", contrast_df_4$p.value)))
+
+contrast_df_4$sort_order <- contrast_df_4$estimate
+contrast_df_4$sort_order[contrast_df_4$STUDY == "Pooled OR"] <- Inf
+contrast_df_4 <- contrast_df_4[order(contrast_df_4$sort_order), ]
+contrast_df_4$STUDY <- factor(contrast_df_4$STUDY, levels = contrast_df_4$STUDY)
+
+contrast_df_4$point_color <- ifelse(
+  contrast_df_4$STUDY == "Pooled OR", 
+  "pooled", 
+  "study"
+)
+
+PLOT4_glm <-
+  ggplot(contrast_df_4, aes(x = estimate, y = STUDY)) + 
+  geom_point(color = "blue", size = 3) + 
+  geom_point(data = subset(contrast_df_4, STUDY == "Pooled OR"), color = "black", size = 5) +
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  theme(legend.position = "none")+
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT4_glm <- 
+  ggplot(contrast_df_4, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT4_combined_glm <-
+  plot_grid(PLOT4_glm, text_panel_PLOT4_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT4_final <-
+  ggdraw(PLOT4_combined_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT4.1_glm_17SEP2026.tiff", PLOT4_final, width = 14, height = 8)
+```
+
+##PLOT4.2 BIN_MODEL - WITHOUT RACE, STUDY SPECIFIC (1M after D2) - Suppl Fig 10.2
+```{r}
+subset_data_PLOT4 <- alle_data_logtrans_clean_age_3D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT4 <- droplevels(subset_data_PLOT4)
+subset_data_PLOT4$SEX <- relevel(factor(subset_data_PLOT4$SEX), ref = "F")
+
+subset_data_PLOT4$IND4 <- factor(subset_data_PLOT4$IND4)
+
+model_bin_glmer_4 <- 
+  glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), data = subset_data_PLOT4, family = binomial(link = "logit"))
+
+emm <- emmeans(model_bin_glmer_4, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+
+contrast_df_4 <- summary(contrast(emm, method = "revpairwise"), infer = TRUE)
+
+contrast_df_4 <- contrast_df_4 %>%
+  mutate(estimate = odds.ratio, lower = asymp.LCL, upper = asymp.UCL)
+
+contrast_df_4$log_estimate <- log(contrast_df_4$estimate)
+contrast_df_4$log_lower <- log(contrast_df_4$lower)
+contrast_df_4$log_upper <- log(contrast_df_4$upper)
+
+contrast_df_4$SE <- (contrast_df_4$log_upper - contrast_df_4$log_lower) / (2*1.96)
+
+res_meta_4 <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_4,
+  method = "REML"
+)
+
+pooled_row_4 <- data.frame(
+  contrast = NA,
+  STUDY = "Pooled OR", 
+  odds.ratio = exp(res_meta_4$b),
+  SE =  res_meta_4$se,
+  df = NA,
+  asymp.LCL = exp(res_meta_4$ci.lb),
+  asymp.UCL = exp(res_meta_4$ci.ub), 
+  null = NA,
+  z.ratio = NA,
+  p.value = res_meta_4$pval,
+  estimate = exp(res_meta_4$b), 
+  lower = exp(res_meta_4$ci.lb),
+  upper = exp(res_meta_4$ci.ub), 
+ 
+  log_estimate = res_meta_4$b,
+  log_lower = res_meta_4$ci.lb,
+  log_upper = res_meta_4$ci.ub)
+
+contrast_df_4 <- rbind(contrast_df_4, pooled_row_4)
+
+contrast_df_4$estimate_txt = sprintf("%.2f", contrast_df_4$estimate) 
+contrast_df_4$ci_txt = paste0("[", sprintf("%.2f", contrast_df_4$lower), ", ", sprintf("%.2f", contrast_df_4$upper), "]") 
+contrast_df_4$p_txt = ifelse(contrast_df_4$p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", contrast_df_4$p.value)))
+
+contrast_df_4$sort_order <- contrast_df_4$estimate
+contrast_df_4$sort_order[contrast_df_4$STUDY == "Pooled OR"] <- Inf
+contrast_df_4 <- contrast_df_4[order(contrast_df_4$sort_order), ]
+contrast_df_4$STUDY <- factor(contrast_df_4$STUDY, levels = contrast_df_4$STUDY)
+
+contrast_df_4$point_color <- ifelse(
+  contrast_df_4$STUDY == "Pooled OR", 
+  "pooled", 
+  "study"
+)
+
+PLOT4_glm <-
+  ggplot(contrast_df_4, aes(x = estimate, y = STUDY)) + 
+  geom_point(color = "blue", size = 3) + 
+  geom_point(data = subset(contrast_df_4, STUDY == "Pooled OR"), color = "black", size = 5) +
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  theme(legend.position = "none")+
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT4_glm <- 
+  ggplot(contrast_df_4, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT4_combined_glm <-
+  plot_grid(PLOT4_glm, text_panel_PLOT4_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT4_final <-
+  ggdraw(PLOT4_combined_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT4.2_glm_17SEP2026.tiff", PLOT4_final, width = 14, height = 8)
+```
+
+##PLOT5: BIN_MODEL - CONFOUNDING FACTORS, IMPUTATION WITH RACE (with RUBIN correction) Suppl Fig S9
+```{r}
+alle_data_logtrans_clean_age$IND4 <- as.factor(alle_data_logtrans_clean_age$IND4)
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$RACE <-
+  relevel(factor(alle_data_logtrans_clean_age$RACE), ref = "WHITE")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+imp_5 <- mice(alle_data_logtrans_clean_age, m = 5, method = "pmm", seed = 123)
+fit_imp_5 <- with(imp_5,  
+  glmmTMB(IND4 ~ CPEVENT + ASSAYCD + SEX + AGE + RACE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), family = binomial(link = "logit")))
+
+#library(lattice)
+#imp_5$predictorMatrix
+#imp_5$maxit
+#mice::plot.mids(imp_5)
+#stripplot(imp)
+#class(imp_5)
+
+tidy_list_5 <- lapply(fit_imp_5$analyses, function(mod) {
+  broom.mixed::tidy(mod, effects = "fixed", conf.int = TRUE, exponentiate = TRUE)
+                      })
+
+tidy_bin_5_all <- bind_rows(tidy_list_5, .id = "imp") %>%
+  mutate(
+    log_est = log(estimate),
+    SE = (log(conf.high) - log(conf.low)) / (2*1.96)
+  )
+
+tidy_bin_5_RUBIN <- tidy_bin_5_all%>%
+  group_by(term) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(log_est),
+    U_bar = mean(SE^2),
+    B = var(log_est),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = exp(Q_bar),
+    conf.low = exp(Q_bar - 1.96 * SE_total),
+    conf.high = exp(Q_bar + 1.96 * SE_total),
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    .groups = "drop")
+
+
+tidy_bin_5_RUBIN <- tidy_bin_5_RUBIN%>%
+   mutate(term_clean = case_when(
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",
+    term == "AGE4" ~ "Age: > 18 vs 10-19",
+    term == "SEXM" ~ "Sex: Male", 
+    term == "RACEOTHER" ~ "Race: Other", 
+    term == "RACEASIAN" ~ "Race: Asian", 
+    term == "RACEBLACK OR AFRICAN AMERICAN" ~ "Race: Black or African American",
+    term == "CPEVENTPredose 2" ~ "Immediately before dose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2", 
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1",
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3",
+    term == "CPEVENT1 Month after booster (2-dose schedule)" ~ "1 Month after booster (2-dose schedule)",
+    term == "CPEVENT1 Month after booster (3-dose schedule)" ~ "1 Month after booster (3-dose schedule)",
+    term == "CPEVENT12 Months after booster (2-dose schedule)" ~ "12 Months after booster (2-dose schedule)",
+    term == "CPEVENT12 Months after booster (3-dose schedule)" ~ "12 Months after booster (3-dose schedule)",
+    term == "CPEVENT26 Months after booster (2-dose schedule)" ~ "26 Months after booster (2-dose schedule)",
+    term == "CPEVENT26 Months after booster (3-dose schedule)" ~ "26 Months after booster (3-dose schedule)",
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENTBefore Booster Vaccination" ~ "Before Booster Vaccination",
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+tidy_bin_5_RUBIN <- tidy_bin_5_RUBIN%>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.01, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+tidy_bin_5_RUBIN <- tidy_bin_5_RUBIN %>%
+  filter(!term_clean %in% c(
+    "1 Month after booster (2-dose schedule)", "1 Month after booster (3-dose schedule)", "12 Months after booster (2-dose schedule)", "12 Months after booster (3-dose schedule)", "26 Months after booster (2-dose schedule)", "26 Months after booster (3-dose schedule)"
+  ))
+
+lvl <- unique(tidy_bin_5_RUBIN$term_clean)
+lvl <- c("Sex: Male", lvl[lvl != "Sex: Male"])
+
+tidy_bin_5_RUBIN$term_clean <- factor(tidy_bin_5_RUBIN$term_clean, levels = lvl)
+
+PLOT5_glmer <- 
+  ggplot(tidy_bin_5_RUBIN, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 3, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(lvl))+
+  theme_minimal (base_family = "Arial") + 
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +  
+  labs(title = "", x = expression(bold("Odds ratio")), y = expression(bold("Covariate")))
+
+text_panel_bin_5 <-
+  ggplot(tidy_bin_5_RUBIN, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(lvl), drop = FALSE) +
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  xlim(0.8, 4) +
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_bin_5 <-
+  plot_grid(PLOT5_glmer, text_panel_bin_5, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_glmer_5 <- 
+  ggdraw(plot_combined_bin_5) + 
+  draw_text("OR", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT5_RUBIN_22SEP2026.tiff", final_plot_glmer_5, width = 14, height = 8)
+```
+
+##PLOT6: BIN_MODEL - CONFOUNDING FACTORS, WITHOUT RACE (with RUBIN correction) - Not in manuscript or supplemental material
+```{r}
+alle_data_logtrans_clean_age <- alle_data_logtrans_clean_age %>%
+  mutate(
+    CPEVENT = case_when(
+      CPEVENT == "1 Month after booster vaccination" ~ "1 Month after booster vaccination",
+      TRUE ~ CPEVENT))
+
+alle_data_logtrans_clean_age$IND4 <- as.factor(alle_data_logtrans_clean_age$IND4)
+alle_data_logtrans_clean_age$CPEVENT<-
+  relevel(factor(alle_data_logtrans_clean_age$CPEVENT), ref = "Predose 1")
+alle_data_logtrans_clean_age$SEX <-
+  relevel(factor(alle_data_logtrans_clean_age$SEX), ref = "F")
+alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP <-
+  relevel(factor(alle_data_logtrans_clean_age$DOSING_SCHEME_GROUP), ref = "GROUP 2")
+alle_data_logtrans_clean_age$ASSAYCD <-
+  relevel(factor(alle_data_logtrans_clean_age$ASSAYCD), ref = "A22")
+alle_data_logtrans_clean_age$GROUP_DOSIS <-
+  relevel(factor(alle_data_logtrans_clean_age$GROUP_DOSIS), ref = "Placebo")
+alle_data_logtrans_clean_age$AGE <-
+  factor(alle_data_logtrans_clean_age$AGE, levels = c("0-4", "5-9", "10-19", "20-29", ">18"))
+contrasts(alle_data_logtrans_clean_age$AGE) <- matrix(c(-1, 1, 0, 0, 0, #5-9 vs 0-4
+                                                        0, -1, 1, 0, 0, #10-19 vs 5-9
+                                                        0, 0, -1, 1, 0, # 20-29 vs 10-19
+                                                        0, 0, -1, 0, 1), nrow=5, byrow = TRUE) #>18 vs 10-19
+
+imp_6 <- mice(alle_data_logtrans_clean_age, m = 5, method = "pmm", seed = 123)
+fit_imp_6 <- with(imp_6,  
+  glmmTMB(IND4 ~ CPEVENT + ASSAYCD + SEX + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), family = binomial(link = "logit")))
+
+#imp_6$predictorMatrix
+#imp_6$maxit
+#mice::plot.mids(imp_6)
+#stripplot(imp_6)
+#class(imp_6)
+
+tidy_list_6 <- lapply(fit_imp_6$analyses, function(mod) {
+  broom.mixed::tidy(mod, effects = "fixed", conf.int = TRUE, exponentiate = TRUE)
+                      })
+
+tidy_bin_6_all <- bind_rows(tidy_list_6, .id = "imp") %>%
+  mutate(
+    log_est = log(estimate),
+    SE = (log(conf.high) - log(conf.low)) / (2*1.96)
+  )
+
+tidy_bin_6_RUBIN <- tidy_bin_6_all%>%
+  group_by(term) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(log_est),
+    U_bar = mean(SE^2),
+    B = var(log_est),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = exp(Q_bar),
+    conf.low = exp(Q_bar - 1.96 * SE_total),
+    conf.high = exp(Q_bar + 1.96 * SE_total),
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    .groups = "drop")
+
+tidy_bin_6_RUBIN <- tidy_bin_6_RUBIN%>%
+   mutate(term_clean = case_when(
+    term == "AGE1" ~ "Age: 5-9 vs 0-4", 
+    term == "AGE2" ~ "Age: 10-19 vs 5-9", 
+    term == "AGE3" ~ "Age: 20-29 vs 10-19",
+    term == "AGE4" ~ "Age: > 18 vs 10-19",
+    term == "SEXM" ~ "Sex: Male", 
+    term == "RACEOTHER" ~ "Race: Other", 
+    term == "RACEASIAN" ~ "Race: Asian", 
+    term == "RACEBLACK OR AFRICAN AMERICAN" ~ "Race: Black or African American",
+    term == "CPEVENTPredose 2" ~ "Immediately before dose 2", 
+    term == "CPEVENT48 Months after Dose 2" ~ "48 Months after Dose 2", 
+    term == "CPEVENT36 Months after Dose 2" ~ "36 Months after Dose 2", 
+    term == "CPEVENT24 Months after Dose 2" ~ "24 Months after Dose 2", 
+    term == "CPEVENT12 Months after Dose 2" ~ "12 Months after Dose 2", 
+    term == "CPEVENT5 Months after Dose 2" ~ "5 Months after Dose 2", 
+    term == "CPEVENT26 Months after booster vaccination" ~ "26 Months after booster",
+    term == "CPEVENT1 Month after Dose 4" ~ "1 Month after Dose 4", 
+    term == "CPEVENT1 Month after Dose 3" ~ "1 Month after Dose 3", 
+    term == "CPEVENT1 Month after Dose 2" ~ "1 Month after Dose 2", 
+    term == "CPEVENT1 Month after Dose 1" ~ "1 Month after Dose 1", 
+    term == "CPEVENT1 Month after booster vaccination" ~ "1 Month after booster", 
+    term == "CPEVENT12 Months after Dose 1" ~ "12 Months after Dose 1",
+    term == "CPEVENT12 Months after Dose 3" ~ "12 Months after Dose 3",
+    term == "CPEVENT12 Months after booster vaccination" ~ "12 Months after booster",
+    term == "CPEVENT18 Months after Dose 2" ~ "18 Months after Dose 2",
+    term == "CPEVENT18 Months after Dose 3" ~ "18 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENT6 Months after Dose 3" ~ "6 Months after Dose 3",
+    term == "CPEVENT36 Months after Dose 3" ~ "36 Months after Dose 3",
+    term == "CPEVENT48 Months after Dose 3" ~ "48 Months after Dose 3",
+    term == "CPEVENT24 Months after Dose 3" ~ "24 Months after Dose 3",
+    term == "CPEVENTBefore Booster Vaccination" ~ "Before Booster Vaccination",
+    term == "DOSING_SCHEME_GROUPGROUP 1" ~ "Dosing scheme 0-1-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 2" ~ "Dosing scheme 0-2-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 3" ~ "Dosing scheme 0-6 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 4" ~ "Dosing scheme 0-2 months", 
+    term == "DOSING_SCHEME_GROUPGROUP 5" ~ "Dosing scheme 0-4 months", 
+    TRUE ~ term )) %>%
+  mutate(
+    term_clean = str_replace(term_clean, "GROUP_DOSIS", "Dosing group: "), 
+    term_clean = str_replace(term_clean, "ASSAYCD", "Strain "))
+
+tidy_bin_6_RUBIN <- tidy_bin_6_RUBIN%>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate), 
+    ci_txt = paste0("[", sprintf("%.2f", conf.low), ", ", sprintf("%.2f", conf.high), "]"), 
+    p_txt = ifelse(p.value < 0.01, "p<0.001", paste0("p=", signif(p.value, 3))), is_bold = ifelse(term_clean == "Sex: Male", TRUE, FALSE))
+
+lvl <- unique(tidy_bin_6_RUBIN$term_clean)
+lvl <- c("Sex: Male", lvl[lvl != "Sex: Male"])
+
+tidy_bin_6_RUBIN$term_clean <- factor(tidy_bin_6_RUBIN$term_clean, levels = lvl)
+
+PLOT6_glmer <- 
+  ggplot(tidy_bin_6_RUBIN, aes(x = estimate, y = term_clean)) + 
+  geom_point(size = 3, color = "blue") + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "black") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(lvl))+
+  theme_minimal (base_family = "Arial") + 
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +  
+  labs(title = "", x = expression(bold("Odds ratio")), y = expression(bold("Covariate")))
+
+text_panel_bin_6 <-
+  ggplot(tidy_bin_6_RUBIN, aes(y = term_clean)) +
+  geom_text(aes(x = 1, label = estimate_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 1.4, label = ci_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 2.5, label = p_txt, fontface = ifelse(term_clean == "Sex: Male", "bold", "plain")), hjust = 0, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(lvl), drop = FALSE) +
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  xlim(0.8, 4) +
+  theme_void() +
+  theme(plot.margin = margin(40, 20, 20, 20))
+
+plot_combined_bin_6 <-
+  plot_grid(PLOT6_glmer, text_panel_bin_6, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+final_plot_glmer_6 <- 
+  ggdraw(plot_combined_bin_6) + 
+  draw_text("OR", x = 0.67, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("95% CI", x = 0.74, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+    draw_text("p-value", x = 0.85, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT6_RUBIN.tiff", final_plot_glmer_6, width = 14, height = 8)
+```
+
+#GMT at baseline calculation
+```{r}
+library(dplyr)
+library(lme4)
+library(lmerTest)
+
+baseline_data <- alle_data_logtrans_clean_age %>%
+  filter(CPEVENT == "Predose 1")
+
+gmt_summary <- baseline_data%>%
+  group_by(SEX) %>%
+  summarise(
+    n = n(),
+    mean_log10 = mean(VALN_LOG10, na.rm = TRUE), 
+    GMT = 10^(mean_log10)
+  )
+gmt_summary
+
+model_baseline <- lmer(VALN_LOG10 ~ SEX + (1 | STUDY/PT), data = baseline_data)
+summary(model_baseline)
+coef <- fixef(model_baseline)["SEXM"]
+percent_diff <- (10^coef -1) * 100
+percent_diff
+```
+
+##PLOT7: BIN_MODEL - IMPUTATION WITH RACE, STUDY SPECIFIC (1M after D3 - with RUBIN correction) Suppl Fig 11
+```{r}
+subset_data_PLOT7 <- alle_data_logtrans_clean_age%>%
+  filter(CPEVENT == "1 Month after Dose 3",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT7 <- droplevels(subset_data_PLOT7)
+subset_data_PLOT7$SEX <- relevel(factor(subset_data_PLOT7$SEX), ref = "F")
+
+imp_7_bin <- mice(subset_data_PLOT7, m = 5, method = 'pmm', seed = 123)
+fit_imp_7_bin <- with(imp_7_bin, glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), family = binomial(link = "logit")))
+
+#imp_7$predictorMatrix
+#imp_7$maxit
+#mice::plot.mids(imp_7)
+#stripplot(imp_7)
+#class(imp_7)
+
+emm_list_7_bin <-
+  lapply(fit_imp_7_bin$analyses, function(mod) {
+    emm_7_bin <- emmeans(mod, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+    res <- summary(contrast(emm_7_bin, method = "revpairwise"), infer = TRUE)
+    res$log_est <- log(res$odds.ratio)
+    res$SE <- (log(res$asymp.UCL) - log(res$asymp.LCL)) / (2*1.96)
+    
+    return(res)
+})
+
+all_imp_7_bin <- bind_rows(emm_list_7_bin, .id = "imp")
+
+contrast_df_7_bin <- all_imp_7_bin %>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(log_est),
+    U_bar = mean(SE^2),
+    B = var(log_est),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = exp(Q_bar),
+    lower = exp(Q_bar - 1.96 * SE_total),
+    upper = exp(Q_bar + 1.96 * SE_total),
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    log_estimate = Q_bar,
+    log_lower = Q_bar - 1.96 *SE_total,
+    log_upper = Q_bar + 1.96*SE_total,
+    SE = SE_total,
+    .groups = "drop")
+
+contrast_df_7_bin <- contrast_df_7_bin %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, log_estimate, log_lower, log_upper, SE)
+  
+res_meta_7_bin <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_7_bin,
+  method = "REML")
+
+pooled_row_7_bin <- data.frame(
+  STUDY = "Pooled OR", 
+  estimate = exp(res_meta_7_bin$b), 
+  lower = exp(res_meta_7_bin$ci.lb),
+  upper = exp(res_meta_7_bin$ci.ub),
+  p.value = res_meta_7_bin$pval,
+  log_estimate = res_meta_7_bin$b,
+  log_lower = res_meta_7_bin$ci.lb,
+  log_upper = res_meta_7_bin$ci.ub,
+  SE = res_meta_7_bin$se
+)
+
+pooled_row_7_bin <- pooled_row_7_bin [, colnames(contrast_df_7_bin)]
+
+contrast_df_7_bin <- rbind(contrast_df_7_bin, pooled_row_7_bin)
+
+contrast_df_7_bin <- contrast_df_7_bin %>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate),
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"),
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_7_bin$sort_order <- contrast_df_7_bin$estimate
+contrast_df_7_bin$sort_order[contrast_df_7_bin$STUDY == "Pooled OR"] <- Inf
+
+contrast_df_7_bin <- contrast_df_7_bin[order(contrast_df_7_bin$sort_order), ]
+contrast_df_7_bin$STUDY <- factor(contrast_df_7_bin$STUDY, levels = contrast_df_7_bin$STUDY)
+
+contrast_df_7_bin$point_color <- ifelse(
+  contrast_df_7_bin$STUDY == "Pooled OR",
+  "pooled",
+  "study"
+)
+
+PLOT7_glm <-
+  ggplot(contrast_df_7_bin, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color)) + 
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black"), guide = "none")+
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(levels(contrast_df_7_bin$STUDY)))+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT7_glm <- 
+  ggplot(contrast_df_7_bin, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(contrast_df_7_bin$STUDY)))+
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT7_glm <-
+  plot_grid(PLOT7_glm, text_panel_PLOT7_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT7_glm_final <-
+  ggdraw(PLOT7_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT7_RUBIN.tiff", PLOT7_glm_final, width = 14, height = 8)
+```
+
+##PLOT8.1: BIN_MODEL - IMPUTATION WITH RACE, STUDY SPECIFIC (1M after D2 - with RUBIN correction) - Suppl Fig 12.1
+```{r}
+subset_data_PLOT8 <- alle_data_logtrans_clean_age_2D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT8 <- droplevels(subset_data_PLOT8)
+subset_data_PLOT8$SEX <- relevel(factor(subset_data_PLOT8$SEX), ref = "F")
+
+subset_data_PLOT8$IND4 <- factor(subset_data_PLOT8$IND4)
+
+imp_8_bin <- mice(subset_data_PLOT8, m = 5, method = 'pmm', seed = 123)
+fit_imp_8_bin <- with(imp_8_bin, glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + (1 | STUDY/PT), family = binomial(link = "logit")))
+
+#imp_8$predictorMatrix
+#imp_8$maxit
+#mice::plot.mids(imp_8)
+#stripplot(imp_8)
+#class(imp_8)
+
+emm_list_8_bin <-
+  lapply(fit_imp_8_bin$analyses, function(mod) {
+    emm_8_bin <- emmeans(mod, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP"))
+    res <- summary(contrast(emm_8_bin, method = "revpairwise"), infer = TRUE)
+    res$log_est <- log(res$odds.ratio)
+    res$SE <- (log(res$asymp.UCL) - log(res$asymp.LCL)) / (2*1.96)
+    
+    return(res)
+})
+
+all_imp_8_bin <- bind_rows(emm_list_8_bin, .id = "imp")
+
+contrast_df_8_bin <- all_imp_8_bin %>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(log_est),
+    U_bar = mean(SE^2),
+    B = var(log_est),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = exp(Q_bar),
+    lower = exp(Q_bar - 1.96 * SE_total),
+    upper = exp(Q_bar + 1.96 * SE_total),
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    log_estimate = Q_bar,
+    log_lower = Q_bar - 1.96 *SE_total,
+    log_upper = Q_bar + 1.96*SE_total,
+    SE = SE_total,
+    .groups = "drop")
+
+contrast_df_8_bin <- contrast_df_8_bin %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, log_estimate, log_lower, log_upper, SE)
+  
+res_meta_8_bin <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_8_bin,
+  method = "REML")
+
+pooled_row_8_bin <- data.frame(
+  STUDY = "Pooled OR", 
+  estimate = exp(res_meta_8_bin$b), 
+  lower = exp(res_meta_8_bin$ci.lb),
+  upper = exp(res_meta_8_bin$ci.ub),
+  p.value = res_meta_8_bin$pval,
+  log_estimate = res_meta_8_bin$b,
+  log_lower = res_meta_8_bin$ci.lb,
+  log_upper = res_meta_8_bin$ci.ub,
+  SE = res_meta_8_bin$se
+)
+
+pooled_row_8_bin <- pooled_row_8_bin [, colnames(contrast_df_8_bin)]
+
+contrast_df_8_bin <- rbind(contrast_df_8_bin, pooled_row_8_bin)
+
+contrast_df_8_bin <- contrast_df_8_bin %>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate),
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"),
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_8_bin$sort_order <- contrast_df_8_bin$estimate
+contrast_df_8_bin$sort_order[contrast_df_8_bin$STUDY == "Pooled OR"] <- Inf
+
+contrast_df_8_bin <- contrast_df_8_bin[order(contrast_df_8_bin$sort_order), ]
+contrast_df_8_bin$STUDY <- factor(contrast_df_8_bin$STUDY, levels = contrast_df_8_bin$STUDY)
+
+contrast_df_8_bin$point_color <- ifelse(
+  contrast_df_8_bin$STUDY == "Pooled OR",
+  "pooled",
+  "study"
+)
+
+PLOT8_glm <-
+  ggplot(contrast_df_8_bin, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color)) + 
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black"), guide = "none")+
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(levels(contrast_df_8_bin$STUDY)))+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT8_glm <- 
+  ggplot(contrast_df_8_bin, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(contrast_df_8_bin$STUDY)))+
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT8_glm <-
+  plot_grid(PLOT8_glm, text_panel_PLOT8_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT8_glm_final <-
+  ggdraw(PLOT8_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT8.1_RUBIN_17SEP2026.tiff", PLOT8_glm_final, width = 14, height = 8)
+```
+
+##PLOT8.2: BIN_MODEL - IMPUTATION WITH RACE, STUDY SPECIFIC (1M after D2 - with RUBIN correction) Suppl Fig 12.2
+```{r}
+subset_data_PLOT8 <- alle_data_logtrans_clean_age_3D%>%
+  filter(CPEVENT == "1 Month after Dose 2",
+         GROUP_DOSIS != "Placebo", 
+         !is.na(SEX)) 
+
+subset_data_PLOT8 <- droplevels(subset_data_PLOT8)
+subset_data_PLOT8$SEX <- relevel(factor(subset_data_PLOT8$SEX), ref = "F")
+
+subset_data_PLOT8$IND4 <- factor(subset_data_PLOT8$IND4)
+
+imp_8_bin <- mice(subset_data_PLOT8, m = 5, method = 'pmm', seed = 123)
+fit_imp_8_bin <- with(imp_8_bin, glmmTMB(IND4 ~ SEX * STUDY + ASSAYCD + RACE + AGE + DOSING_SCHEME_GROUP + GROUP_DOSIS + (1 | STUDY/PT), family = binomial(link = "logit")))
+
+#imp_8$predictorMatrix
+#imp_8$maxit
+#mice::plot.mids(imp_8)
+#stripplot(imp_8)
+#class(imp_8)
+
+emm_list_8_bin <-
+  lapply(fit_imp_8_bin$analyses, function(mod) {
+    emm_8_bin <- emmeans(mod, specs = ~ SEX | STUDY, type = "response", nuisance = c("ASSAYCD", "AGE", "RACE", "DOSING_SCHEME_GROUP", "GROUP_DOSIS"))
+    res <- summary(contrast(emm_8_bin, method = "revpairwise"), infer = TRUE)
+    res$log_est <- log(res$odds.ratio)
+    res$SE <- (log(res$asymp.UCL) - log(res$asymp.LCL)) / (2*1.96)
+    
+    return(res)
+})
+
+all_imp_8_bin <- bind_rows(emm_list_8_bin, .id = "imp")
+
+contrast_df_8_bin <- all_imp_8_bin %>%
+  group_by(STUDY) %>%
+  summarise(
+    m = n(), 
+    Q_bar = mean(log_est),
+    U_bar = mean(SE^2),
+    B = var(log_est),
+    T_var = U_bar + (1+1/m) * B, 
+    SE_total = sqrt(T_var),
+    estimate = exp(Q_bar),
+    lower = exp(Q_bar - 1.96 * SE_total),
+    upper = exp(Q_bar + 1.96 * SE_total),
+    z = Q_bar / SE_total,
+    p.value = 2 * (1-pnorm(abs(z))),
+    log_estimate = Q_bar,
+    log_lower = Q_bar - 1.96 *SE_total,
+    log_upper = Q_bar + 1.96*SE_total,
+    SE = SE_total,
+    .groups = "drop")
+
+contrast_df_8_bin <- contrast_df_8_bin %>%
+  select(
+    STUDY, estimate, lower, upper, p.value, log_estimate, log_lower, log_upper, SE)
+  
+res_meta_8_bin <- rma(
+  yi = log_estimate, 
+  sei = SE, 
+  data = contrast_df_8_bin,
+  method = "REML")
+
+pooled_row_8_bin <- data.frame(
+  STUDY = "Pooled OR", 
+  estimate = exp(res_meta_8_bin$b), 
+  lower = exp(res_meta_8_bin$ci.lb),
+  upper = exp(res_meta_8_bin$ci.ub),
+  p.value = res_meta_8_bin$pval,
+  log_estimate = res_meta_8_bin$b,
+  log_lower = res_meta_8_bin$ci.lb,
+  log_upper = res_meta_8_bin$ci.ub,
+  SE = res_meta_8_bin$se
+)
+
+pooled_row_8_bin <- pooled_row_8_bin [, colnames(contrast_df_8_bin)]
+
+contrast_df_8_bin <- rbind(contrast_df_8_bin, pooled_row_8_bin)
+
+contrast_df_8_bin <- contrast_df_8_bin %>%
+  mutate(
+    estimate_txt = sprintf("%.2f", estimate),
+    ci_txt = paste0("[", sprintf("%.2f", lower), ", ", sprintf("%.2f", upper), "]"),
+    p_txt = ifelse(p.value < 0.001, "p<0.001", paste0("p=", sprintf("%.3f", p.value))))
+
+contrast_df_8_bin$sort_order <- contrast_df_8_bin$estimate
+contrast_df_8_bin$sort_order[contrast_df_8_bin$STUDY == "Pooled OR"] <- Inf
+
+contrast_df_8_bin <- contrast_df_8_bin[order(contrast_df_8_bin$sort_order), ]
+contrast_df_8_bin$STUDY <- factor(contrast_df_8_bin$STUDY, levels = contrast_df_8_bin$STUDY)
+
+contrast_df_8_bin$point_color <- ifelse(
+  contrast_df_8_bin$STUDY == "Pooled OR",
+  "pooled",
+  "study"
+)
+
+PLOT8_glm <-
+  ggplot(contrast_df_8_bin, aes(x = estimate, y = STUDY)) + 
+  geom_point(aes(color = point_color, size = point_color)) + 
+  scale_color_manual(values = c("study" = "blue", "pooled" = "black"), guide = "none")+
+  scale_size_manual(values = c("study" = 3, "pooled" = 5), guide = "none")+
+  geom_errorbar(aes(xmin = lower, xmax = upper), height = 0.2, color = "black") + 
+  geom_vline(xintercept = 1, linetype = "dashed", color = "black") + 
+  theme_minimal (base_family = "Arial") +
+  scale_x_log10() +
+  scale_y_discrete(limits = rev(levels(contrast_df_8_bin$STUDY)))+
+  theme(
+    plot.margin = margin(20,20,20,20),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_blank(), 
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 10)) +
+  labs(title = "", x = expression(bold("Adjusted OR F - M")), y = "")
+
+text_panel_PLOT8_glm <- 
+  ggplot(contrast_df_8_bin, aes (y = STUDY))+
+  geom_text(aes(x = 1, label = estimate_txt), hjust = 1, size = 3.5, family = "Arial") +
+  geom_text(aes(x = 2, label = ci_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  geom_text(aes(x = 3, label = p_txt), hjust = 1, size = 3.5, family = "Arial") + 
+  scale_y_discrete(limits = rev(levels(contrast_df_8_bin$STUDY)))+
+  scale_x_continuous(limits = c(0.5, 3.5)) + 
+  theme_void() 
+
+PLOT8_glm <-
+  plot_grid(PLOT8_glm, text_panel_PLOT8_glm, ncol = 2, rel_widths = c(2.5, 1.5), align = "h", axis = "tb")
+
+PLOT8_glm_final <-
+  ggdraw(PLOT8_glm) + 
+  draw_text("OR", x = 0.69, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("95% CI", x = 0.79, y = 0.95, fontface = "bold", size = 11, family = "Arial") + 
+  draw_text("p-value", x = 0.9, y = 0.95, fontface = "bold", size = 11, family = "Arial") 
+
+ggsave("PLOT8.2_RUBIN_17SEP2026.tiff", PLOT8_glm_final, width = 14, height = 8)
+```
