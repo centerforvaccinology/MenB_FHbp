@@ -1,0 +1,2 @@
+Biological sex is a recognized biological factor influencing vaccine-induced immune responses. However, the extent to which biological sex and other host-, vaccine- and study-related factors affect MenB-FHbp vaccine immunogenicity remains insufficiently understood. 
+Immunogenicity and seroprotection data of 12 clinical trials were retrieved. After dataset cleaning, multuvariable linear and logistic mixed-effects models adjusted for covariates were performed.
